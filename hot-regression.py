@@ -6,10 +6,6 @@ import multiprocessing
 warnings.filterwarnings("ignore")
 np.random.seed(2017)
 
-
-
-
-
 Input_param_names = ['ambient',
                      'coolant',
                      'u_d',
@@ -192,7 +188,19 @@ def train_keras():
 
 
 def train_linear():
-    lr_model = LinearRegression()
+    from sklearn.decomposition import PCA
+    from sklearn.linear_model import ElasticNetCV
+    from sklearn.pipeline import make_pipeline
+    from sklearn.preprocessing import PolynomialFeatures
+
+    #lr_model = LinearRegression()
+    lr_model = \
+        make_pipeline(
+            PolynomialFeatures(degree=2, include_bias=False,
+                               interaction_only=False),
+            PCA(iterated_power=4, svd_solver="randomized"),
+            ElasticNetCV(l1_ratio=0.25, tol=0.001)
+        )
     print('train')
     lr_model.fit(tra_df[x_cols], tra_df[y_cols])
     print('test')
@@ -232,29 +240,25 @@ if __name__ == '__main__':
                            columns=orig_cols)
 
     # tpot
-    for target in Target_param_names:
+    """for target in Target_param_names:
         tpot = TPOTRegressor(verbosity=2, cv=5, random_state=2017,
                              n_jobs=-1, periodic_checkpoint_folder='out')
         tpot.fit(tra_df[x_cols], tra_df[target])
         tpot.export('out/tpotted_{}.py'.format(target))
-        pred_df[target] = tpot.predict(tst_df[x_cols])
+        pred_df[target] = tpot.predict(tst_df[x_cols])"""
 
     # linear model
-    # pred = train_linear()
+    pred = train_linear()
 
 
     actual = \
         dataset[dataset[profile_id_colname].isin(testset)].loc[:, y_cols]
-    #actual = actual.diff()
-    #actual.dropna(inplace=True)
     actual.reset_index(drop=True, inplace=True)
-    # untransform prediction
 
+    # untransform prediction
     inversed_pred = pd.DataFrame(
         scaler.inverse_transform(pred_df),
         columns=orig_cols).loc[:, y_cols]
-    # undo diff()
-    #inversed_pred = inversed_pred + actual
 
     print('mse: {} K²'.format(mean_squared_error(actual,
                                                  inversed_pred)))
