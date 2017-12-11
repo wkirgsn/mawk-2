@@ -193,18 +193,21 @@ def train_linear():
     from sklearn.pipeline import make_pipeline
     from sklearn.preprocessing import PolynomialFeatures
 
-    #lr_model = LinearRegression()
-    lr_model = \
-        make_pipeline(
-            PolynomialFeatures(degree=2, include_bias=False,
-                               interaction_only=False),
-            PCA(iterated_power=4, svd_solver="randomized"),
-            ElasticNetCV(l1_ratio=0.25, tol=0.001)
-        )
     print('train')
-    lr_model.fit(tra_df[x_cols], tra_df[y_cols])
-    print('test')
-    return lr_model.predict(tst_df[x_cols])
+
+    #lr_model = LinearRegression()
+    preds = []
+    for target in y_cols:
+        lr_model = \
+            make_pipeline(
+                PolynomialFeatures(degree=2, include_bias=False,
+                                   interaction_only=False),
+                PCA(iterated_power=4, svd_solver="randomized"),
+                ElasticNetCV(l1_ratio=0.25, tol=0.001)
+            )
+        lr_model.fit(tra_df[x_cols], tra_df[target])
+        preds.append(lr_model.predict(tst_df[x_cols]))
+    return pd.DataFrame(preds, columns=y_cols)
 
 
 if __name__ == '__main__':
