@@ -207,7 +207,7 @@ def train_linear():
             )
         lr_model.fit(tra_df[x_cols], tra_df[target])
         preds.append(lr_model.predict(tst_df[x_cols]))
-    return pd.DataFrame(preds, columns=y_cols)
+    return pd.DataFrame({c: x for c, x in zip(y_cols, preds)})
 
 
 if __name__ == '__main__':
