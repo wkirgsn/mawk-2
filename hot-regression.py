@@ -187,17 +187,19 @@ def train_keras():
     plt.plot(time, y_pred[:, 0])
 
 
-def train_linear():
+def train_linear(tra, tst, x_columns, y_columns):
     from sklearn.decomposition import PCA
     from sklearn.linear_model import ElasticNetCV
     from sklearn.pipeline import make_pipeline
     from sklearn.preprocessing import PolynomialFeatures
+    from sklearn.kernel_approximation import Nystroem
+    from sklearn.linear_model import ElasticNetCV
 
     print('train')
 
     #lr_model = LinearRegression()
     preds = []
-    for target in y_cols:
+    for target in y_columns:
         lr_model = \
             make_pipeline(
                 PolynomialFeatures(degree=2, include_bias=False,
@@ -205,9 +207,9 @@ def train_linear():
                 PCA(iterated_power=4, svd_solver="randomized"),
                 ElasticNetCV(l1_ratio=0.25, tol=0.001)
             )
-        lr_model.fit(tra_df[x_cols], tra_df[target])
-        preds.append(lr_model.predict(tst_df[x_cols]))
-    return pd.DataFrame({c: x for c, x in zip(y_cols, preds)})
+        lr_model.fit(tra[x_columns], tra[target])
+        preds.append(lr_model.predict(tst[x_columns]))
+    return pd.DataFrame({c: x for c, x in zip(y_columns, preds)})
 
 
 if __name__ == '__main__':
@@ -251,7 +253,7 @@ if __name__ == '__main__':
         pred_df[target] = tpot.predict(tst_df[x_cols])"""
 
     # linear model
-    pred = train_linear()
+    pred_df[y_cols] = train_linear(tra_df, tst_df, x_cols, y_cols)
 
 
     actual = \
@@ -267,6 +269,6 @@ if __name__ == '__main__':
                                                  inversed_pred)))
 
     # plots
-    """plt.plot(actual)
+    plt.plot(actual)
     plt.plot(inversed_pred)
-    plt.show()"""
+    plt.show()
