@@ -191,7 +191,9 @@ def tpotting():
     preds = []
     for target in Target_param_names:
         tpot = TPOTRegressor(verbosity=2, cv=5, random_state=2017,
-                             n_jobs=4, periodic_checkpoint_folder='out')
+                             n_jobs=4,
+                             periodic_checkpoint_folder='out/out_{}'.format(
+                                 target))
         tpot.fit(tra_df[x_cols], tra_df[target])
         tpot.export('out/tpotted_{}.py'.format(target))
         preds.append(tpot.predict(tst_df[x_cols]))
