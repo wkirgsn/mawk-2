@@ -187,6 +187,17 @@ def train_keras():
     plt.plot(time, y_pred[:, 0])
 
 
+def tpotting():
+    preds = []
+    for target in Target_param_names:
+        tpot = TPOTRegressor(verbosity=2, cv=5, random_state=2017,
+                             n_jobs=4, periodic_checkpoint_folder='out')
+        tpot.fit(tra_df[x_cols], tra_df[target])
+        tpot.export('out/tpotted_{}.py'.format(target))
+        preds.append(tpot.predict(tst_df[x_cols]))
+    return pd.DataFrame({c: x for c, x in zip(Target_param_names, preds)})
+
+
 def train_linear(tra, tst, x_columns, y_columns):
     from sklearn.decomposition import PCA
     from sklearn.linear_model import ElasticNetCV
@@ -197,7 +208,7 @@ def train_linear(tra, tst, x_columns, y_columns):
 
     print('train')
 
-    #lr_model = LinearRegression()
+    # lr_model = LinearRegression()
     preds = []
     for target in y_columns:
         lr_model = \
@@ -212,6 +223,12 @@ def train_linear(tra, tst, x_columns, y_columns):
     return pd.DataFrame({c: x for c, x in zip(y_columns, preds)})
 
 
+def plot_results(y, yhat):
+    plt.plot(y)
+    plt.plot(yhat)
+    plt.show()
+
+
 if __name__ == '__main__':
     multiprocessing.set_start_method('forkserver')
 
@@ -221,7 +238,6 @@ if __name__ == '__main__':
     import matplotlib.pyplot as plt
     import seaborn
     from sklearn.preprocessing import MinMaxScaler
-    from sklearn.linear_model import LinearRegression
 
     from sklearn.model_selection import train_test_split
     from keras.models import Sequential
@@ -245,15 +261,10 @@ if __name__ == '__main__':
                            columns=orig_cols)
 
     # tpot
-    """for target in Target_param_names:
-        tpot = TPOTRegressor(verbosity=2, cv=5, random_state=2017,
-                             n_jobs=-1, periodic_checkpoint_folder='out')
-        tpot.fit(tra_df[x_cols], tra_df[target])
-        tpot.export('out/tpotted_{}.py'.format(target))
-        pred_df[target] = tpot.predict(tst_df[x_cols])"""
+    pred_df[y_cols] = tpotting()
 
     # linear model
-    pred_df[y_cols] = train_linear(tra_df, tst_df, x_cols, y_cols)
+    #pred_df[y_cols] = train_linear(tra_df, tst_df, x_cols, y_cols)
 
 
     actual = \
@@ -269,6 +280,5 @@ if __name__ == '__main__':
                                                  inversed_pred)))
 
     # plots
-    plt.plot(actual)
-    plt.plot(inversed_pred)
-    plt.show()
+    #plot_results(actual, inversed_pred)
+
