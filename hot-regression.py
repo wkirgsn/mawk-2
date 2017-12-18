@@ -118,9 +118,7 @@ def train_keras():
     # create model
     model = Sequential()
     model.add(LSTM(n_neurons,
-                   batch_input_shape=(batch_size,
-                                      X_tr.shape[1],
-                                      X_tr.shape[2])))
+                   input_shape=(X_tr.shape[1], X_tr.shape[2])))
     model.add(Dense(4))
 
     """callbacks = [
