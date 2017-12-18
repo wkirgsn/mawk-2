@@ -7,6 +7,7 @@ warnings.filterwarnings("ignore")
 np.random.seed(2017)
 
 DEBUG = False
+n_debug = 50  # first n timestamps to use if debug
 Input_param_names = ['ambient',
                      'coolant',
                      'u_d',
@@ -65,9 +66,9 @@ def munge_data(all_df, dropna=True):
     val_df = all_df[all_df[profile_id_colname].isin(valset)]
 
     if DEBUG:
-        train_df = train_df.iloc[:100, :]
-        val_df = val_df.iloc[:100, :]
-        test_df = test_df.iloc[:100, :]
+        train_df = train_df.iloc[:n_debug, :]
+        val_df = val_df.iloc[:n_debug, :]
+        test_df = test_df.iloc[:n_debug, :]
 
     train_df.reset_index(drop=True, inplace=True)
     test_df.reset_index(drop=True, inplace=True)
@@ -119,12 +120,17 @@ def train_keras():
     model.add(LSTM(n_neurons,
                    batch_input_shape=(batch_size,
                                       X_tr.shape[1],
-                                      X_tr.shape[2]), stateful=True))
+                                      X_tr.shape[2])))
     model.add(Dense(4))
 
     """callbacks = [
         EarlyStopping(monitor='val_loss', patience=3, verbose=0),
     ]"""
+
+    # truncate dataset to have n samples dividable by batchsize for stateful RNN
+    """trunc_idx = X_tr.shape[0] % batch_size
+    X_tr = X_tr.iloc[:-trunc_idx, :]
+    Y_tr = Y_tr.iloc[:-trunc_idx, :]"""
 
     model.compile(optimizer='adam', loss='mse')
     history = model.fit(X_tr, Y_tr, epochs=n_epochs, batch_size=batch_size,
@@ -204,13 +210,15 @@ if __name__ == '__main__':
                            columns=orig_cols)
 
     # tpot
-    #pred_df[y_cols] = tpotting()
+    # yhat = tpotting()
 
     # linear model
-    #pred_df[y_cols] = train_linear(tra_df, tst_df, x_cols, y_cols)
+    # yhat = train_linear(tra_df, tst_df, x_cols, y_cols)
 
     # keras
-    pred_df[y_cols] = train_keras()
+    yhat = train_keras()
+    prediction_start_idx = len(pred_df)-yhat.shape[0]
+    pred_df.loc[prediction_start_idx:, y_cols] = yhat
 
     actual = \
         dataset[dataset[profile_id_colname].isin(testset)].loc[:, y_cols]
@@ -221,9 +229,15 @@ if __name__ == '__main__':
         scaler.inverse_transform(pred_df),
         columns=orig_cols).loc[:, y_cols]
 
-    print('mse: {} K²'.format(mean_squared_error(actual,
-                                                 inversed_pred)))
+    if DEBUG:
+        actual = actual.iloc[:n_debug, :]
+        inversed_pred = inversed_pred.iloc[:n_debug, :]
+        print('actual {}, pred {}'.format(actual.shape, inversed_pred.shape))
+
+    print('mse: {} K²'.format(mean_squared_error(
+        actual.iloc[prediction_start_idx:, :],
+        inversed_pred.iloc[prediction_start_idx:, :])))
 
     # plots
-    plot_results(actual, inversed_pred)
+    #plot_results(actual, inversed_pred)
 
