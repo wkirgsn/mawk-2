@@ -107,9 +107,7 @@ def train_keras():
 
     from joblib import Parallel, delayed
     from multiprocessing import cpu_count
-    import os
 
-    os.system("taskset -p 0xff %d" % os.getpid())  # reset core affinity
 
     print('Keras version: {}'.format(keras_version))
     batch_size = 128
@@ -218,6 +216,9 @@ if __name__ == '__main__':
     import seaborn
     from sklearn.preprocessing import MinMaxScaler
     from sklearn.model_selection import train_test_split
+    import os
+
+    os.system("taskset -p 0xff %d" % os.getpid())  # reset core affinity
 
     scaler = MinMaxScaler()
     dataset = pd.read_csv(join('input', 'measures.csv'), dtype=np.float32)
