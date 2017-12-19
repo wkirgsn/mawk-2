@@ -119,7 +119,7 @@ def train_keras():
     @measure_time
     def create_dataset(dataset, observe=1):
         # full cpu usage does not work somehow
-        n_cpu = int(cpu_count())
+        n_cpu = 3  # maximum that works
         dataXY = Parallel(n_jobs=n_cpu)\
             (delayed(_prll_create_dataset)(i, observe, dataset, x_cols,
                                            y_cols)
