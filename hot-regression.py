@@ -6,7 +6,7 @@ import multiprocessing
 warnings.filterwarnings("ignore")
 np.random.seed(2017)
 
-DEBUG = False
+DEBUG = True
 n_debug = 50  # first n timestamps to use if debug
 Input_param_names = ['ambient',
                      'coolant',
@@ -34,6 +34,7 @@ file_path = "/home/wilhelmk/Messdaten/PMSM_Lastprofile/hdf/all_load_profiles"
 
 def munge_data(all_df, dropna=True):
     """load data for linear regressors"""
+
     def add_hist_data(df):
         """add previous x data points"""
         shifted_df_list = []
@@ -93,10 +94,10 @@ def train_keras():
     from keras import __version__ as keras_version
 
     print('Keras version: {}'.format(keras_version))
-    batch_size = 64
-    n_neurons = 8
-    n_epochs = 500
-    observation_len = 10
+    batch_size = 128
+    n_neurons = 64
+    n_epochs = 200
+    observation_len = 5
 
     def create_dataset(dataset, observe=1):
         dataX, dataY = [], []
@@ -133,8 +134,8 @@ def train_keras():
     model.compile(optimizer='adam', loss='mse')
     history = model.fit(X_tr, Y_tr, epochs=n_epochs, batch_size=batch_size,
                         validation_data=(X_val, Y_val), verbose=1,
-                        shuffle=False)
-    return model.predict(X_tst)
+                        shuffle=True)
+    return model.predict(X_tst), history.history
 
 
 def tpotting():
@@ -184,13 +185,13 @@ def plot_results(y, yhat):
 if __name__ == '__main__':
     multiprocessing.set_start_method('forkserver')
 
+    import joblib
     import pandas as pd
     from tpot import TPOTRegressor
     from sklearn.metrics import mean_squared_error
     import matplotlib.pyplot as plt
     import seaborn
     from sklearn.preprocessing import MinMaxScaler
-
     from sklearn.model_selection import train_test_split
 
     scaler = MinMaxScaler()
@@ -214,7 +215,7 @@ if __name__ == '__main__':
     # yhat = train_linear(tra_df, tst_df, x_cols, y_cols)
 
     # keras
-    yhat = train_keras()
+    yhat, hist = train_keras()
     prediction_start_idx = len(pred_df)-yhat.shape[0]
     pred_df.loc[prediction_start_idx:, y_cols] = yhat
 
@@ -237,5 +238,9 @@ if __name__ == '__main__':
         inversed_pred.iloc[prediction_start_idx:, :])))
 
     # plots
-    #plot_results(actual, inversed_pred)
+    """plt.subplot(211)
+    plt.plot(hist['loss'])
+    plt.plot(hist['val_loss'])
+    plt.subplot(212)
+    plot_results(actual, inversed_pred)"""
 
