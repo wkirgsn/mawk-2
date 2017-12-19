@@ -107,7 +107,9 @@ def train_keras():
 
     from joblib import Parallel, delayed
     from multiprocessing import cpu_count
+    import os
 
+    os.system("taskset -p 0xff %d" % os.getpid())  # reset core affinity
 
     print('Keras version: {}'.format(keras_version))
     batch_size = 128
