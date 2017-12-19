@@ -26,7 +26,7 @@ Target_param_names = ['pm',
                       'stator_winding']
 
 profile_id_colname = 'profile_id'
-lookback = 2
+lookback = 1
 
 valset = ['31', ]
 testset = ['20', ]
@@ -114,7 +114,7 @@ def train_keras():
     batch_size = 128
     n_neurons = 64
     n_epochs = 200
-    observation_len = 50
+    observation_len = 5
 
     @measure_time
     def create_dataset(dataset, observe=1):
@@ -150,7 +150,7 @@ def train_keras():
     model.add(Dense(4))
 
     callbacks = [
-        EarlyStopping(monitor='val_loss', patience=5, verbose=0),
+        EarlyStopping(monitor='val_loss', patience=20, verbose=0),
     ]
 
     # truncate dataset to have n samples dividable by batchsize for stateful RNN
