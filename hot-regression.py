@@ -6,7 +6,7 @@ import multiprocessing
 warnings.filterwarnings("ignore")
 np.random.seed(2017)
 
-DEBUG = True
+DEBUG = False
 n_debug = 50  # first n timestamps to use if debug
 Input_param_names = ['ambient',
                      'coolant',
@@ -30,6 +30,12 @@ testset = ['20', ]
 loadsets = ['4', '6', '10', '11', '20', '27', '29', '30',
             '31', '32', '36']
 file_path = "/home/wilhelmk/Messdaten/PMSM_Lastprofile/hdf/all_load_profiles"
+
+
+def _prll_create_dataset(idx, obs, data, x_cols, y_cols):
+    """internally used by function create_dataset for parallelization"""
+    return data.loc[idx:(idx + obs), x_cols].as_matrix(), \
+           data.loc[idx + obs, y_cols].as_matrix()
 
 
 def munge_data(all_df, dropna=True):
@@ -93,6 +99,9 @@ def train_keras():
     from keras.callbacks import EarlyStopping
     from keras import __version__ as keras_version
 
+    from joblib import Parallel, delayed
+    from multiprocessing import cpu_count
+
     print('Keras version: {}'.format(keras_version))
     batch_size = 128
     n_neurons = 64
@@ -100,12 +109,13 @@ def train_keras():
     observation_len = 5
 
     def create_dataset(dataset, observe=1):
-        dataX, dataY = [], []
-        for i in range(len(dataset) - observe):
-            dataX.append(dataset.loc[i:(i + observe), x_cols])
-            dataY.append(dataset.loc[i + observe, y_cols])
-        return np.array([p.as_matrix() for p in dataX]), \
-               np.array([p.as_matrix() for p in dataY])
+        # full cpu usage does not work somehow
+        dataXY = Parallel(n_jobs=cpu_count()-2)\
+            (delayed(_prll_create_dataset)(i, observe, dataset, x_cols,
+                                           y_cols)
+             for i in range(len(dataset) - observe))
+        separated = list(zip(*dataXY))
+        return np.array(separated[0]), np.array(separated[1])
 
     X_tr, Y_tr = create_dataset(tra_df, observation_len-1)
     X_val, Y_val = create_dataset(val_df, observation_len-1)
