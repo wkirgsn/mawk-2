@@ -9,7 +9,7 @@ import os
 warnings.filterwarnings("ignore")
 np.random.seed(2017)
 
-DEBUG = True
+DEBUG = False
 n_debug = 50  # first n timestamps to use if debug
 Input_param_names = ['ambient',
                      'coolant',
