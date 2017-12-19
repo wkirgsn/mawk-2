@@ -4,6 +4,7 @@ import numpy as np
 import warnings
 import multiprocessing
 import time
+
 warnings.filterwarnings("ignore")
 np.random.seed(2017)
 
@@ -107,6 +108,7 @@ def train_keras():
     from joblib import Parallel, delayed
     from multiprocessing import cpu_count
 
+
     print('Keras version: {}'.format(keras_version))
     batch_size = 128
     n_neurons = 64
@@ -116,7 +118,7 @@ def train_keras():
     @measure_time
     def create_dataset(dataset, observe=1):
         # full cpu usage does not work somehow
-        n_cpu = int(cpu_count()/2)
+        n_cpu = int(cpu_count()-2)
         dataXY = Parallel(n_jobs=n_cpu)\
             (delayed(_prll_create_dataset)(i, observe, dataset, x_cols,
                                            y_cols)
