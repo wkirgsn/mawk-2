@@ -3,6 +3,7 @@ from os.path import join
 import numpy as np
 import warnings
 import multiprocessing
+import time
 warnings.filterwarnings("ignore")
 np.random.seed(2017)
 
@@ -32,6 +33,17 @@ loadsets = ['4', '6', '10', '11', '20', '27', '29', '30',
 file_path = "/home/wilhelmk/Messdaten/PMSM_Lastprofile/hdf/all_load_profiles"
 
 
+def measure_time(func):
+    """time measuring decorator"""
+    def wrapped(*args, **kwargs):
+        start_time = time.time()
+        ret = func(*args, **kwargs)
+        end_time = time.time()
+        print('took {} seconds'.format(end_time-start_time))
+        return ret
+    return wrapped
+
+
 def _prll_create_dataset(idx, obs, data, x_cols, y_cols):
     """internally used by function create_dataset for parallelization"""
     return data.loc[idx:(idx + obs), x_cols].as_matrix(), \
@@ -39,7 +51,7 @@ def _prll_create_dataset(idx, obs, data, x_cols, y_cols):
 
 
 def munge_data(all_df, dropna=True):
-    """load data for linear regressors"""
+    """load data and engineer"""
 
     def add_hist_data(df):
         """add previous x data points"""
@@ -84,13 +96,6 @@ def munge_data(all_df, dropna=True):
     return train_df, val_df, test_df
 
 
-def get_norm_stats(all):
-    temp = all[0].copy()
-    for i in range(1, len(all)):
-        temp.append(all[i], ignore_index=True)
-    return temp.mean(), temp.max(), temp.min()
-
-
 def train_keras():
     from keras.models import Sequential
     from keras.layers import LSTM, GRU
@@ -108,17 +113,23 @@ def train_keras():
     n_epochs = 200
     observation_len = 5
 
+    @measure_time
     def create_dataset(dataset, observe=1):
         # full cpu usage does not work somehow
-        dataXY = Parallel(n_jobs=cpu_count()-2)\
+        n_cpu = int(cpu_count()/2)
+        dataXY = Parallel(n_jobs=n_cpu)\
             (delayed(_prll_create_dataset)(i, observe, dataset, x_cols,
                                            y_cols)
              for i in range(len(dataset) - observe))
         separated = list(zip(*dataXY))
         return np.array(separated[0]), np.array(separated[1])
 
+    print("build dataset..")
+    print('trainset..')
     X_tr, Y_tr = create_dataset(tra_df, observation_len-1)
+    print('valset..')
     X_val, Y_val = create_dataset(val_df, observation_len-1)
+    print('testset..')
     X_tst, Y_tst = create_dataset(tst_df, observation_len-1)
 
     # reshape for keras (not necessary here)
@@ -243,7 +254,7 @@ if __name__ == '__main__':
         inversed_pred = inversed_pred.iloc[:n_debug, :]
         print('actual {}, pred {}'.format(actual.shape, inversed_pred.shape))
 
-    print('mse: {} K²'.format(mean_squared_error(
+    print('mse: {:.6} K²'.format(mean_squared_error(
         actual.iloc[prediction_start_idx:, :],
         inversed_pred.iloc[prediction_start_idx:, :])))
 
