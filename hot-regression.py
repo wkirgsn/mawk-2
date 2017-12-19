@@ -34,13 +34,10 @@ loadsets = ['4', '6', '10', '11', '20', '27', '29', '30',
             '31', '32', '36']
 file_path = "/home/wilhelmk/Messdaten/PMSM_Lastprofile/hdf/all_load_profiles"
 
-os.system("taskset -p 0xfff %d" % os.getpid())  # reset core affinity
-
 
 def measure_time(func):
     """time measuring decorator"""
     def wrapped(*args, **kwargs):
-        os.system("taskset -p 0xfff %d" % os.getpid())  # reset core affinity
 
         start_time = time.time()
         ret = func(*args, **kwargs)
@@ -113,8 +110,6 @@ def train_keras():
     from joblib import Parallel, delayed
     from multiprocessing import cpu_count
 
-    os.system("taskset -p 0xfff %d" % os.getpid())  # reset core affinity
-
     print('Keras version: {}'.format(keras_version))
     batch_size = 128
     n_neurons = 64
@@ -124,8 +119,6 @@ def train_keras():
     @measure_time
     def create_dataset(dataset, observe=1):
         # full cpu usage does not work somehow
-        os.system("taskset -p 0xfff %d" % os.getpid())  # reset core affinity
-
         n_cpu = int(cpu_count())
         dataXY = Parallel(n_jobs=n_cpu)\
             (delayed(_prll_create_dataset)(i, observe, dataset, x_cols,
@@ -225,7 +218,7 @@ if __name__ == '__main__':
     from sklearn.preprocessing import MinMaxScaler
     from sklearn.model_selection import train_test_split
 
-    os.system("taskset -p 0xfff %d" % os.getpid())  # reset core affinity
+    os.system("taskset -p 0xffffffffff %d" % os.getpid())  # reset core affinity
 
     scaler = MinMaxScaler()
     dataset = pd.read_csv(join('input', 'measures.csv'), dtype=np.float32)
