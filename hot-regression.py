@@ -146,9 +146,9 @@ def train_keras():
                    input_shape=(X_tr.shape[1], X_tr.shape[2])))
     model.add(Dense(4))
 
-    """callbacks = [
-        EarlyStopping(monitor='val_loss', patience=3, verbose=0),
-    ]"""
+    callbacks = [
+        EarlyStopping(monitor='val_loss', patience=5, verbose=0),
+    ]
 
     # truncate dataset to have n samples dividable by batchsize for stateful RNN
     """trunc_idx = X_tr.shape[0] % batch_size
@@ -158,7 +158,9 @@ def train_keras():
     model.compile(optimizer='adam', loss='mse')
     history = model.fit(X_tr, Y_tr, epochs=n_epochs, batch_size=batch_size,
                         validation_data=(X_val, Y_val), verbose=1,
-                        shuffle=True)
+                        shuffle=True,
+                        callbacks=callbacks,
+                        implementation=2)
     return model.predict(X_tst), history.history
 
 
