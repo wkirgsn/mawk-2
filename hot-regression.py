@@ -9,7 +9,7 @@ import os
 warnings.filterwarnings("ignore")
 np.random.seed(2017)
 
-DEBUG = False
+DEBUG = True
 n_debug = 50  # first n timestamps to use if debug
 Input_param_names = ['ambient',
                      'coolant',
@@ -147,6 +147,9 @@ def train_keras():
                   # implementation=2,  # only known by non-CUDNN classes
                   input_shape=(X_tr.shape[1], X_tr.shape[2])
                   ))
+    model.add(
+        CuDNNGRU(n_neurons)
+    )
     model.add(Dense(4))
 
     callbacks = [
@@ -213,7 +216,6 @@ def plot_results(y, yhat):
 if __name__ == '__main__':
     multiprocessing.set_start_method('forkserver')
 
-    import joblib
     import pandas as pd
     from tpot import TPOTRegressor
     from sklearn.metrics import mean_squared_error
