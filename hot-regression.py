@@ -101,7 +101,7 @@ def munge_data(all_df, dropna=True):
 
 def train_keras():
     from keras.models import Sequential
-    from keras.layers import LSTM, GRU
+    from keras.layers import LSTM, GRU, CuDNNLSTM, CuDNNGRU
     from keras.layers.core import Dense, Dropout, Flatten
     from keras.optimizers import SGD
     from keras.callbacks import EarlyStopping
@@ -142,9 +142,11 @@ def train_keras():
 
     # create model
     model = Sequential()
-    model.add(LSTM(n_neurons,
-                   input_shape=(X_tr.shape[1], X_tr.shape[2]),
-                   implementation=2))
+    model.add(
+        CuDNNLSTM(n_neurons,
+                  # implementation=2,  # only known by non-CUDNN classes
+                  input_shape=(X_tr.shape[1], X_tr.shape[2])
+                  ))
     model.add(Dense(4))
 
     callbacks = [
