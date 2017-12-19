@@ -143,7 +143,8 @@ def train_keras():
     # create model
     model = Sequential()
     model.add(LSTM(n_neurons,
-                   input_shape=(X_tr.shape[1], X_tr.shape[2])))
+                   input_shape=(X_tr.shape[1], X_tr.shape[2]),
+                   implementation=2))
     model.add(Dense(4))
 
     callbacks = [
@@ -159,8 +160,7 @@ def train_keras():
     history = model.fit(X_tr, Y_tr, epochs=n_epochs, batch_size=batch_size,
                         validation_data=(X_val, Y_val), verbose=1,
                         shuffle=True,
-                        callbacks=callbacks,
-                        implementation=2)
+                        callbacks=callbacks)
     return model.predict(X_tst), history.history
 
 
