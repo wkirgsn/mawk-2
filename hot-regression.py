@@ -4,11 +4,12 @@ import numpy as np
 import warnings
 import multiprocessing
 import time
+import os
 
 warnings.filterwarnings("ignore")
 np.random.seed(2017)
 
-DEBUG = False
+DEBUG = True
 n_debug = 50  # first n timestamps to use if debug
 Input_param_names = ['ambient',
                      'coolant',
@@ -33,10 +34,14 @@ loadsets = ['4', '6', '10', '11', '20', '27', '29', '30',
             '31', '32', '36']
 file_path = "/home/wilhelmk/Messdaten/PMSM_Lastprofile/hdf/all_load_profiles"
 
+os.system("taskset -p 0xfff %d" % os.getpid())  # reset core affinity
+
 
 def measure_time(func):
     """time measuring decorator"""
     def wrapped(*args, **kwargs):
+        os.system("taskset -p 0xfff %d" % os.getpid())  # reset core affinity
+
         start_time = time.time()
         ret = func(*args, **kwargs)
         end_time = time.time()
@@ -108,17 +113,20 @@ def train_keras():
     from joblib import Parallel, delayed
     from multiprocessing import cpu_count
 
+    os.system("taskset -p 0xfff %d" % os.getpid())  # reset core affinity
 
     print('Keras version: {}'.format(keras_version))
     batch_size = 128
     n_neurons = 64
     n_epochs = 200
-    observation_len = 5
+    observation_len = 50
 
     @measure_time
     def create_dataset(dataset, observe=1):
         # full cpu usage does not work somehow
-        n_cpu = int(cpu_count()-2)
+        os.system("taskset -p 0xfff %d" % os.getpid())  # reset core affinity
+
+        n_cpu = int(cpu_count())
         dataXY = Parallel(n_jobs=n_cpu)\
             (delayed(_prll_create_dataset)(i, observe, dataset, x_cols,
                                            y_cols)
@@ -216,9 +224,8 @@ if __name__ == '__main__':
     import seaborn
     from sklearn.preprocessing import MinMaxScaler
     from sklearn.model_selection import train_test_split
-    import os
 
-    os.system("taskset -p 0xff %d" % os.getpid())  # reset core affinity
+    os.system("taskset -p 0xfff %d" % os.getpid())  # reset core affinity
 
     scaler = MinMaxScaler()
     dataset = pd.read_csv(join('input', 'measures.csv'), dtype=np.float32)
