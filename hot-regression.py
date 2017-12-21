@@ -13,10 +13,8 @@ import config as cfg
 warnings.filterwarnings("ignore")
 np.random.seed(2017)
 
+# todo: xgb, lgbm attempts
 # todo: taskset only if not 0xfff
-# todo: add shifts to axis 0 (figure out how many shifts)
-# todo: feature engineer similar to two sigma financial competition winners
-# todo: add dropout/ l1, l2 regularization
 # todo: save train trend history for visualizing
 # todo: apply bayesian opt for hyperparams
 
@@ -44,30 +42,49 @@ def munge_data(all_df, dropna=True):
 
     def add_hist_data(df):
         """add previous x data points"""
-        input_p_names = cfg.data_cfg['Input_param_names']
+
         shifted_df_list = []
         for shift in range(lookback):
-            cols = ['{}_prev{}'.format(c, ~shift) for c in input_p_names]
-            shifted_df = df.loc[:, input_p_names].shift(shift+1)
+            cols = ['{}_lag{}'.format(c, ~shift) for c in df.columns]
+            shifted_df = df.shift(shift+1)
             shifted_df.columns = cols
             shifted_df_list.append(shifted_df)
         return [df, ] + shifted_df_list
 
-    # make stationary by having differences only
-    # all_df[orig_cols] = all_df[orig_cols].diff()
-    # all_df.dropna(inplace=True)
+    input_cols = cfg.data_cfg['Input_param_names']
 
-    # normalize
-    all_df[orig_cols] = scaler.fit_transform(all_df[orig_cols])
+    # normalize y
+    all_df[y_cols] = scaler_y.fit_transform(all_df[y_cols])
 
-    # add lookback
-    train_df_list = add_hist_data(all_df)
+    # engineer new features
+    if lookback == 1:
+        train_feats = all_df.loc[:, input_cols]
+        lag1 = train_feats.shift(1)
+        lag1_diff = train_feats.diff()
+        lag1_abs = abs(lag1_diff)
+        lag1_sum = train_feats + lag1
+        # change column names
+        lag1.columns = ['{}_lag1'.format(c) for c in input_cols]
+        lag1_diff.columns = ['{}_lag1_diff'.format(c) for c in input_cols]
+        lag1_abs.columns = ['{}_lag1_abs'.format(c) for c in input_cols]
+        lag1_sum.columns = ['{}_lag1_sum'.format(c) for c in input_cols]
+        train_df_list = [all_df, lag1, lag1_diff, lag1_abs, lag1_sum]
+    else:
+        # add lookback
+        train_df_list = add_hist_data(all_df.loc[:, input_cols])
+
     all_df = pd.concat(train_df_list, axis=1)
+
     if dropna:
-        all_df = all_df.iloc[lookback:, :]  # cutoff nans
+        all_df.dropna(inplace=True)
     else:
         all_df.fillna(0, inplace=True)
     all_df.reset_index(drop=True, inplace=True)
+
+    x_cols = [c for c in all_df.columns if c not in y_cols+[p_id,]]
+    # normalize x
+    scaler_x = MinMaxScaler()
+    all_df[x_cols] = scaler_x.fit_transform(all_df[x_cols])
 
     # split train, test and validation set
     train_df = all_df[~all_df[p_id].isin(testset+valset)]
@@ -114,18 +131,19 @@ def train_keras():
         df_Y = dataset.loc[:, y_cols]
 
         if fit_to_batch:
-            # add shifts to dataset samples
-            shifted_list_of_df_X = \
-                [df_X.shift(i+1) for i in range(batch_size-1)]
-            df_X = pd.concat([df_X, ] + shifted_list_of_df_X, axis=0)
-            df_X.dropna(inplace=True)
-            df_X.reset_index(drop=True, inplace=True)
+            if cfg.keras_cfg['add_shifts']:
+                # add shifts to dataset samples
+                shifted_list_of_df_X = \
+                    [df_X.shift(i+1) for i in range(batch_size-1)]
+                df_X = pd.concat([df_X, ] + shifted_list_of_df_X, axis=0)
+                df_X.dropna(inplace=True)
+                df_X.reset_index(drop=True, inplace=True)
 
-            shifted_list_of_df_Y = \
-                [df_Y.shift(i+1) for i in range(batch_size-1)]
-            df_Y = pd.concat([df_Y, ] + shifted_list_of_df_Y, axis=0)
-            df_Y.dropna(inplace=True)
-            df_Y.reset_index(drop=True, inplace=True)
+                shifted_list_of_df_Y = \
+                    [df_Y.shift(i+1) for i in range(batch_size-1)]
+                df_Y = pd.concat([df_Y, ] + shifted_list_of_df_Y, axis=0)
+                df_Y.dropna(inplace=True)
+                df_Y.reset_index(drop=True, inplace=True)
 
             # cut the tail
             trunc_idx = len(df_X) % batch_size
@@ -184,11 +202,6 @@ def train_keras():
                       patience=cfg.train_cfg['early_stop_patience'],
                       verbose=0),
     ]
-
-    # truncate dataset to have n samples dividable by batchsize for stateful RNN
-    """trunc_idx = X_tr.shape[0] % batch_size
-    X_tr = X_tr.iloc[:-trunc_idx, :]
-    Y_tr = Y_tr.iloc[:-trunc_idx, :]"""
 
     model.compile(optimizer='adam', loss='mse')
     history = model.fit(X_tr, Y_tr, epochs=n_epochs, batch_size=batch_size,
@@ -251,15 +264,6 @@ def get_available_gpus():
     return [x.name for x in local_device_protos if x.device_type == 'GPU']
 
 
-def inverse_transform(transformed_values):
-    """inverse transform given the scaler, the orig cols and target cols"""
-    df = pd.DataFrame(np.zeros((transformed_values.shape[0], len(orig_cols))),
-                      columns=orig_cols)
-    df.loc[:, y_cols] = transformed_values
-    return pd.DataFrame(scaler.inverse_transform(df),
-                        columns=orig_cols).loc[:, y_cols]
-
-
 if __name__ == '__main__':
     multiprocessing.set_start_method('forkserver')
 
@@ -285,10 +289,10 @@ if __name__ == '__main__':
     testset = cfg.data_cfg['testset']
     valset = cfg.data_cfg['valset']
     input_p_names = cfg.data_cfg['Input_param_names']
-    output_p_names = cfg.data_cfg['Target_param_names']
+    y_cols = cfg.data_cfg['Target_param_names']
     batch_size = cfg.keras_cfg['batch_size']
 
-    scaler = MinMaxScaler()
+    scaler_y = MinMaxScaler()
     dataset = pd.read_csv(join('input', 'measures.csv'), dtype=np.float32)
 
     orig_cols = [c for c in dataset.columns if c != p_id]
@@ -302,8 +306,7 @@ if __name__ == '__main__':
         for orig_input_param_name in input_p_names:
             if orig_input_param_name in col:
                 x_cols.append(col)
-    # determine target columns
-    y_cols = output_p_names
+
 
     # prepare target data
     actual = \
@@ -322,9 +325,11 @@ if __name__ == '__main__':
     if cfg.keras_cfg['do_train']:
         yhat, hist, actual = train_keras()
         # untransform actual
-        actual = inverse_transform(actual)
-        
-    inversed_pred = inverse_transform(yhat)
+        actual = pd.DataFrame(scaler_y.inverse_transform(actual),
+                              columns=y_cols)
+
+    inversed_pred = pd.DataFrame(scaler_y.inverse_transform(yhat),
+                                 columns=y_cols)
 
     print('mse: {:.6} K²'.format(mean_squared_error(actual, inversed_pred)))
 
