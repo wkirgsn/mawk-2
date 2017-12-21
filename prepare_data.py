@@ -1,3 +1,5 @@
+"""This script was for initial data preparation into a dataframe"""
+
 from os.path import join
 
 import pandas as pd
