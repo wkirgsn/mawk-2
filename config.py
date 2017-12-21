@@ -1,7 +1,7 @@
 
 debug_cfg = {'DEBUG': False,
              'choose_debug_on_gpu_availability': True,
-             'n_debug': 100,  # first n timestamps to use if debug
+             'n_debug': 20,  # first n timestamps to use if debug
              }
 
 data_cfg = {
@@ -32,6 +32,7 @@ path_cfg = {
 
 plot_cfg = {'do_plot': False, }
 keras_cfg = {
+    'do_train': True,
     'batch_size': 64,
     'n_neurons': 64,
     'n_epochs': 200,

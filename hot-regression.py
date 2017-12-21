@@ -14,7 +14,6 @@ warnings.filterwarnings("ignore")
 np.random.seed(2017)
 
 # todo: taskset only if not 0xfff
-# todo: refactor to stateful RNNs
 # todo: add shifts to axis 0 (figure out how many shifts)
 # todo: feature engineer similar to two sigma financial competition winners
 # todo: add dropout/ l1, l2 regularization
@@ -100,9 +99,6 @@ def train_keras():
     from multiprocessing import cpu_count
 
     print('Keras version: {}'.format(keras_version))
-    batch_size = cfg.keras_cfg['batch_size']
-    if DEBUG:
-        assert batch_size < n_debug
     n_neurons = cfg.keras_cfg['n_neurons']
     n_epochs = cfg.keras_cfg['n_epochs']
     arch_dict = {'lstm': LSTM, 'gru': GRU, 'rnn': SimpleRNN}
@@ -118,13 +114,26 @@ def train_keras():
         df_Y = dataset.loc[:, y_cols]
 
         if fit_to_batch:
+            # add shifts to dataset samples
+            shifted_list_of_df_X = \
+                [df_X.shift(i+1) for i in range(batch_size-1)]
+            df_X = pd.concat([df_X, ] + shifted_list_of_df_X, axis=0)
+            df_X.dropna(inplace=True)
+            df_X.reset_index(drop=True, inplace=True)
+
+            shifted_list_of_df_Y = \
+                [df_Y.shift(i+1) for i in range(batch_size-1)]
+            df_Y = pd.concat([df_Y, ] + shifted_list_of_df_Y, axis=0)
+            df_Y.dropna(inplace=True)
+            df_Y.reset_index(drop=True, inplace=True)
+
             # cut the tail
-            trunc_idx = len(dataset) % batch_size
+            trunc_idx = len(df_X) % batch_size
             df_X = df_X.iloc[:-trunc_idx, :]
             df_Y = df_Y.iloc[:-trunc_idx, :]
 
             # reorder for batch training
-            new_idx = np.tile(np.arange(batch_size), len(dataset) // batch_size)
+            new_idx = np.tile(np.arange(batch_size), len(df_X) // batch_size)
             assert len(df_X)==new_idx.shape[0],\
                 "{} != {}".format(len(df_X), new_idx.shape[0])
             df_X['new_idx'] = new_idx
@@ -186,7 +195,10 @@ def train_keras():
                         validation_data=(X_val, Y_val), verbose=1,
                         shuffle=False,
                         callbacks=callbacks)
-    return model.predict(X_tst, batch_size=batch_size), history.history
+    model.reset_states()
+
+    return model.predict(X_tst, batch_size=batch_size),\
+           history.history, Y_tst
 
 
 def tpotting():
@@ -239,6 +251,15 @@ def get_available_gpus():
     return [x.name for x in local_device_protos if x.device_type == 'GPU']
 
 
+def inverse_transform(transformed_values):
+    """inverse transform given the scaler, the orig cols and target cols"""
+    df = pd.DataFrame(np.zeros((transformed_values.shape[0], len(orig_cols))),
+                      columns=orig_cols)
+    df.loc[:, y_cols] = transformed_values
+    return pd.DataFrame(scaler.inverse_transform(df),
+                        columns=orig_cols).loc[:, y_cols]
+
+
 if __name__ == '__main__':
     multiprocessing.set_start_method('forkserver')
 
@@ -265,6 +286,7 @@ if __name__ == '__main__':
     valset = cfg.data_cfg['valset']
     input_p_names = cfg.data_cfg['Input_param_names']
     output_p_names = cfg.data_cfg['Target_param_names']
+    batch_size = cfg.keras_cfg['batch_size']
 
     scaler = MinMaxScaler()
     dataset = pd.read_csv(join('input', 'measures.csv'), dtype=np.float32)
@@ -283,8 +305,12 @@ if __name__ == '__main__':
     # determine target columns
     y_cols = output_p_names
 
-    pred_df = pd.DataFrame(np.zeros(tst_df[orig_cols].shape),
-                           columns=orig_cols)
+    # prepare target data
+    actual = \
+        dataset[dataset[p_id].isin(testset)].loc[:, y_cols]
+    actual.reset_index(drop=True, inplace=True)
+    if DEBUG:
+        actual = actual.iloc[:n_debug, :]
 
     # tpot
     # yhat = tpotting()
@@ -293,27 +319,14 @@ if __name__ == '__main__':
     # yhat = train_linear(tra_df, tst_df, x_cols, y_cols)
 
     # keras
-    yhat, hist = train_keras()
-    prediction_start_idx = len(pred_df)-yhat.shape[0]
-    pred_df.loc[prediction_start_idx:, y_cols] = yhat
+    if cfg.keras_cfg['do_train']:
+        yhat, hist, actual = train_keras()
+        # untransform actual
+        actual = inverse_transform(actual)
+        
+    inversed_pred = inverse_transform(yhat)
 
-    actual = \
-        dataset[dataset[p_id].isin(testset)].loc[:, y_cols]
-    actual.reset_index(drop=True, inplace=True)
-
-    # untransform prediction
-    inversed_pred = pd.DataFrame(
-        scaler.inverse_transform(pred_df),
-        columns=orig_cols).loc[:, y_cols]
-
-    if DEBUG:
-        actual = actual.iloc[:n_debug, :]
-        inversed_pred = inversed_pred.iloc[:n_debug, :]
-        print('actual {}, pred {}'.format(actual.shape, inversed_pred.shape))
-
-    print('mse: {:.6} K²'.format(mean_squared_error(
-        actual.iloc[prediction_start_idx:, :],
-        inversed_pred.iloc[prediction_start_idx:, :])))
+    print('mse: {:.6} K²'.format(mean_squared_error(actual, inversed_pred)))
 
     # plots
     if cfg.plot_cfg['do_plot']:
