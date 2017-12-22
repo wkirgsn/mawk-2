@@ -245,25 +245,23 @@ def tpotting():
 
 def train_linear():
     from sklearn.decomposition import PCA
-    from sklearn.linear_model import ElasticNetCV
     from sklearn.pipeline import make_pipeline
     from sklearn.preprocessing import PolynomialFeatures
     from sklearn.kernel_approximation import Nystroem
-    from sklearn.linear_model import ElasticNetCV
+    from sklearn.linear_model import ElasticNetCV, LogisticRegression
 
     print('train')
 
-    # todo: rewrite this..
-    # lr_model = LinearRegression()
     preds = []
     for target in y_cols:
-        lr_model = \
+        """lr_model = \
             make_pipeline(
                 PolynomialFeatures(degree=2, include_bias=False,
                                    interaction_only=False),
                 PCA(iterated_power=4, svd_solver="randomized"),
                 ElasticNetCV(l1_ratio=0.25, tol=0.001)
-            )
+            )"""
+        lr_model = ElasticNetCV()
         lr_model.fit(tra_df[x_cols], tra_df[target])
         preds.append(lr_model.predict(tst_df[x_cols]))
     return np.transpose(np.array(preds))
@@ -371,7 +369,7 @@ if __name__ == '__main__':
     # yhat = tpotting()
 
     # linear model
-    #yhat = train_linear()
+    yhat = train_linear()
 
     # extra trees
     #yhat = train_extra_tree()
@@ -380,7 +378,7 @@ if __name__ == '__main__':
     #yhat = train_catboost()
 
     # ridge
-    yhat = train_ridge()
+    #yhat = train_ridge()
     #yhat = (yhat + yhat_ridge[:yhat.shape[0], :])/2
 
     inversed_pred = pd.DataFrame(scaler_y.inverse_transform(yhat),
