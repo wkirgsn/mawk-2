@@ -380,8 +380,8 @@ if __name__ == '__main__':
     #yhat = train_catboost()
 
     # ridge
-    yhat_ridge = train_ridge()
-    yhat = (yhat + yhat_ridge[:yhat.shape[0], :])/2
+    yhat = train_ridge()
+    #yhat = (yhat + yhat_ridge[:yhat.shape[0], :])/2
 
     inversed_pred = pd.DataFrame(scaler_y.inverse_transform(yhat),
                                  columns=y_cols)
