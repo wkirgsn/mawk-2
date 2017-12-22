@@ -173,25 +173,27 @@ def train_keras():
             df_Y['new_idx'] = new_idx
             df_Y.sort_values(by='new_idx', ascending=True, inplace=True)
 
+            original_indices = [list(df_X.index), list(df_Y.index)]
+
             df_X.reset_index(drop=True, inplace=True)
             df_Y.reset_index(drop=True, inplace=True)
-            df_X = df_X[[c for c in df_X.columns if c != 'new_idx']]
-            df_Y = df_Y[[c for c in df_Y.columns if c != 'new_idx']]
+            df_X.drop(['new_idx', ], axis=1, inplace=True)
+            df_Y.drop(['new_idx', ], axis=1, inplace=True)
 
         x_mat = df_X.as_matrix()
         y_mat = df_Y.as_matrix()
         del df_X, df_Y
 
         x_mat = np.reshape(x_mat, (x_mat.shape[0], 1, x_mat.shape[1]))
-        return x_mat, y_mat
+        return x_mat, y_mat, original_indices
 
     print("build dataset..")
     print('trainset..')
-    X_tr, Y_tr = create_dataset(tra_df)
+    X_tr, Y_tr, idx_tr = create_dataset(tra_df)
     print('valset..')
-    X_val, Y_val = create_dataset(val_df)
+    X_val, Y_val, idx_val = create_dataset(val_df)
     print('testset..')
-    X_tst, Y_tst = create_dataset(tst_df)
+    X_tst, Y_tst, idx_tst = create_dataset(tst_df)
 
     print('Shapes: train {}, val {}, test {}'.format(X_tr.shape,
                                                      X_val.shape,
@@ -225,7 +227,7 @@ def train_keras():
     model.reset_states()
 
     return model.predict(X_tst, batch_size=batch_size),\
-           history.history, Y_tst
+           history.history, idx_tst
 
 
 def tpotting():
@@ -358,11 +360,18 @@ if __name__ == '__main__':
     if DEBUG:
         actual = actual.iloc[:n_debug, :]
 
+    # keras
+    if cfg.keras_cfg['do_train']:
+        yhat, hist, tst_idx = train_keras()
+        # untransform actual
+        yhat = pd.DataFrame(yhat, columns=y_cols, index=tst_idx).sort_index()
+        yhat = yhat.values
+
     # tpot
     # yhat = tpotting()
 
     # linear model
-    yhat = train_linear()
+    #yhat = train_linear()
 
     # extra trees
     #yhat = train_extra_tree()
@@ -371,19 +380,15 @@ if __name__ == '__main__':
     #yhat = train_catboost()
 
     # ridge
-    #yhat = train_ridge()
-
-    # keras
-    if cfg.keras_cfg['do_train']:
-        yhat, hist, actual = train_keras()
-        # untransform actual
-        actual = pd.DataFrame(scaler_y.inverse_transform(actual),
-                              columns=y_cols)
+    yhat_ridge = train_ridge()
+    yhat = (yhat + yhat_ridge[:yhat.shape[0], :])/2
 
     inversed_pred = pd.DataFrame(scaler_y.inverse_transform(yhat),
                                  columns=y_cols)
     inversed_pred = np.square(inversed_pred)
-    print('mse: {:.6} K²'.format(mean_squared_error(actual, inversed_pred)))
+    print('mse: {:.6} K²'.format(mean_squared_error(actual.values[
+                                                    :yhat.shape[0], :],
+                                                    inversed_pred)))
 
     # plots
     if cfg.plot_cfg['do_plot']:
