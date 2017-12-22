@@ -55,6 +55,8 @@ def munge_data(all_df, dropna=True):
 
     # normalize y
     all_df[y_cols] = scaler_y.fit_transform(all_df[y_cols])
+    # predict the exponentials
+    all_df[y_cols] = np.exp(all_df[y_cols])
 
     # engineer new features
     if lookback == 1:
@@ -85,7 +87,11 @@ def munge_data(all_df, dropna=True):
     # normalize x
     scaler_x = MinMaxScaler()
     all_df[x_cols] = scaler_x.fit_transform(all_df[x_cols])
-
+    logs = pd.DataFrame(np.log(all_df[x_cols]+1.5).values,
+                        columns=['{}_ln'.format(c) for c in x_cols])
+    exponents = pd.DataFrame(np.exp(all_df[x_cols]).values,
+                             columns={'{}_exp'.format(c) for c in x_cols})
+    all_df = pd.concat([all_df, logs, exponents], axis=1)
     # split train, test and validation set
     train_df = all_df[~all_df[p_id].isin(testset+valset)]
     test_df = all_df[all_df[p_id].isin(testset)]
@@ -262,6 +268,14 @@ def train_extra_tree():
     return et.predict(tst_df[x_cols])
 
 
+def train_ridge():
+    from sklearn.linear_model import Ridge
+    print('train ridge')
+    ridge = Ridge(alpha=40)
+    ridge.fit(tra_df[x_cols], tra_df[y_cols])
+    return ridge.predict(tst_df[x_cols])
+
+
 def train_catboost():
     from catboost import CatBoostRegressor
 
@@ -349,6 +363,9 @@ if __name__ == '__main__':
     # catboost
     yhat = train_catboost()
 
+    # ridge
+    #yhat = train_ridge()
+
     # keras
     if cfg.keras_cfg['do_train']:
         yhat, hist, actual = train_keras()
@@ -356,9 +373,9 @@ if __name__ == '__main__':
         actual = pd.DataFrame(scaler_y.inverse_transform(actual),
                               columns=y_cols)
 
+    yhat = np.log(yhat)
     inversed_pred = pd.DataFrame(scaler_y.inverse_transform(yhat),
                                  columns=y_cols)
-
     print('mse: {:.6} K²'.format(mean_squared_error(actual, inversed_pred)))
 
     # plots
