@@ -31,8 +31,9 @@ path_cfg = {
 }
 
 plot_cfg = {'do_plot': False, }
+
 keras_cfg = {
-    'do_train': True,
+    'do_train': False,
     'add_shifts': False,
     'batch_size': 64,
     'n_neurons': 64,

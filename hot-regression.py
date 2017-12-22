@@ -237,6 +237,7 @@ def train_linear(tra, tst, x_columns, y_columns):
 
     print('train')
 
+    # todo: rewrite this..
     # lr_model = LinearRegression()
     preds = []
     for target in y_columns:
@@ -250,6 +251,27 @@ def train_linear(tra, tst, x_columns, y_columns):
         lr_model.fit(tra[x_columns], tra[target])
         preds.append(lr_model.predict(tst[x_columns]))
     return pd.DataFrame({c: x for c, x in zip(y_columns, preds)})
+
+
+def train_extra_tree():
+    from sklearn.ensemble import ExtraTreesRegressor
+
+    print('train extra trees')
+    et = ExtraTreesRegressor()
+    et.fit(tra_df[x_cols], tra_df[y_cols])
+    return et.predict(tst_df[x_cols])
+
+
+def train_catboost():
+    from catboost import CatBoostRegressor
+
+    print('train catboost')
+    preds = []
+    for target in y_cols:
+        cat = CatBoostRegressor()
+        cat.fit(tra_df[x_cols], tra_df[target])
+        preds.append(cat.predict(tst_df[x_cols]))
+    return np.transpose(np.array(preds))
 
 
 def plot_results(y, yhat):
@@ -321,6 +343,12 @@ if __name__ == '__main__':
     # linear model
     # yhat = train_linear(tra_df, tst_df, x_cols, y_cols)
 
+    # extra trees
+    #yhat = train_extra_tree()
+
+    # catboost
+    yhat = train_catboost()
+
     # keras
     if cfg.keras_cfg['do_train']:
         yhat, hist, actual = train_keras()
@@ -335,9 +363,10 @@ if __name__ == '__main__':
 
     # plots
     if cfg.plot_cfg['do_plot']:
-        plt.subplot(211)
-        plt.plot(hist['loss'])
-        plt.plot(hist['val_loss'])
+        if cfg.keras_cfg['do_train']:
+            plt.subplot(211)
+            plt.plot(hist['loss'])
+            plt.plot(hist['val_loss'])
         plt.subplot(212)
         plot_results(actual, inversed_pred)
 
