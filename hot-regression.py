@@ -53,10 +53,11 @@ def munge_data(all_df, dropna=True):
 
     input_cols = cfg.data_cfg['Input_param_names']
 
+    # predict the logs
+    all_df[y_cols] = np.sqrt(all_df[y_cols])
+
     # normalize y
     all_df[y_cols] = scaler_y.fit_transform(all_df[y_cols])
-    # predict the exponentials
-    all_df[y_cols] = np.exp(all_df[y_cols])
 
     # engineer new features
     if lookback == 1:
@@ -83,15 +84,22 @@ def munge_data(all_df, dropna=True):
         all_df.fillna(0, inplace=True)
     all_df.reset_index(drop=True, inplace=True)
 
+    # update x cols
     x_cols = [c for c in all_df.columns if c not in y_cols+[p_id,]]
+
     # normalize x
     scaler_x = MinMaxScaler()
     all_df[x_cols] = scaler_x.fit_transform(all_df[x_cols])
     logs = pd.DataFrame(np.log(all_df[x_cols]+1.5).values,
                         columns=['{}_ln'.format(c) for c in x_cols])
-    exponents = pd.DataFrame(np.exp(all_df[x_cols]).values,
-                             columns={'{}_exp'.format(c) for c in x_cols})
-    all_df = pd.concat([all_df, logs, exponents], axis=1)
+    all_df = pd.concat([all_df, logs], axis=1)
+
+    scaler_x2 = MinMaxScaler()
+    all_df[logs.columns] = scaler_x2.fit_transform(all_df[logs.columns])
+
+    # last update of x cols
+    x_cols = [c for c in all_df.columns if c not in y_cols + [p_id, ]]
+
     # split train, test and validation set
     train_df = all_df[~all_df[p_id].isin(testset+valset)]
     test_df = all_df[all_df[p_id].isin(testset)]
@@ -233,7 +241,7 @@ def tpotting():
     return pd.DataFrame({c: x for c, x in zip(output_p_names, preds)})
 
 
-def train_linear(tra, tst, x_columns, y_columns):
+def train_linear():
     from sklearn.decomposition import PCA
     from sklearn.linear_model import ElasticNetCV
     from sklearn.pipeline import make_pipeline
@@ -246,7 +254,7 @@ def train_linear(tra, tst, x_columns, y_columns):
     # todo: rewrite this..
     # lr_model = LinearRegression()
     preds = []
-    for target in y_columns:
+    for target in y_cols:
         lr_model = \
             make_pipeline(
                 PolynomialFeatures(degree=2, include_bias=False,
@@ -254,9 +262,9 @@ def train_linear(tra, tst, x_columns, y_columns):
                 PCA(iterated_power=4, svd_solver="randomized"),
                 ElasticNetCV(l1_ratio=0.25, tol=0.001)
             )
-        lr_model.fit(tra[x_columns], tra[target])
-        preds.append(lr_model.predict(tst[x_columns]))
-    return pd.DataFrame({c: x for c, x in zip(y_columns, preds)})
+        lr_model.fit(tra_df[x_cols], tra_df[target])
+        preds.append(lr_model.predict(tst_df[x_cols]))
+    return np.transpose(np.array(preds))
 
 
 def train_extra_tree():
@@ -343,7 +351,6 @@ if __name__ == '__main__':
             if orig_input_param_name in col:
                 x_cols.append(col)
 
-
     # prepare target data
     actual = \
         dataset[dataset[p_id].isin(testset)].loc[:, y_cols]
@@ -355,13 +362,13 @@ if __name__ == '__main__':
     # yhat = tpotting()
 
     # linear model
-    # yhat = train_linear(tra_df, tst_df, x_cols, y_cols)
+    yhat = train_linear()
 
     # extra trees
     #yhat = train_extra_tree()
 
     # catboost
-    yhat = train_catboost()
+    #yhat = train_catboost()
 
     # ridge
     #yhat = train_ridge()
@@ -373,9 +380,9 @@ if __name__ == '__main__':
         actual = pd.DataFrame(scaler_y.inverse_transform(actual),
                               columns=y_cols)
 
-    yhat = np.log(yhat)
     inversed_pred = pd.DataFrame(scaler_y.inverse_transform(yhat),
                                  columns=y_cols)
+    inversed_pred = np.square(inversed_pred)
     print('mse: {:.6} K²'.format(mean_squared_error(actual, inversed_pred)))
 
     # plots
