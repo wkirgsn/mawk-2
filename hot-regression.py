@@ -1,12 +1,12 @@
 """Author: WKirgsn, 2017"""
-from os.path import join
 import warnings
 import multiprocessing
 import time
 import os
+from os.path import join
 
-from tensorflow.python.client import device_lib
 import numpy as np
+from tensorflow.python.client import device_lib
 
 import config as cfg
 
@@ -22,7 +22,6 @@ np.random.seed(2017)
 def measure_time(func):
     """time measuring decorator"""
     def wrapped(*args, **kwargs):
-
         start_time = time.time()
         ret = func(*args, **kwargs)
         end_time = time.time()
@@ -35,86 +34,6 @@ def _prll_create_dataset(idx, obs, data, x_cols, y_cols):
     """internally used by function create_dataset for parallelization"""
     return data.loc[idx:(idx + obs), x_cols].as_matrix(), \
            data.loc[idx + obs, y_cols].as_matrix()
-
-
-def munge_data(all_df, dropna=True):
-    """load data and engineer"""
-
-    def add_hist_data(df):
-        """add previous x data points"""
-
-        shifted_df_list = []
-        for shift in range(lookback):
-            cols = ['{}_lag{}'.format(c, ~shift) for c in df.columns]
-            shifted_df = df.shift(shift+1)
-            shifted_df.columns = cols
-            shifted_df_list.append(shifted_df)
-        return [df, ] + shifted_df_list
-
-    input_cols = cfg.data_cfg['Input_param_names']
-
-    # predict the logs
-    all_df[y_cols] = np.sqrt(all_df[y_cols])
-
-    # normalize y
-    all_df[y_cols] = scaler_y.fit_transform(all_df[y_cols])
-
-    # engineer new features
-    if lookback == 1:
-        train_feats = all_df.loc[:, input_cols]
-        lag1 = train_feats.shift(1)
-        lag1_diff = train_feats.diff()
-        lag1_abs = abs(lag1_diff)
-        lag1_sum = train_feats + lag1
-        # change column names
-        lag1.columns = ['{}_lag1'.format(c) for c in input_cols]
-        lag1_diff.columns = ['{}_lag1_diff'.format(c) for c in input_cols]
-        lag1_abs.columns = ['{}_lag1_abs'.format(c) for c in input_cols]
-        lag1_sum.columns = ['{}_lag1_sum'.format(c) for c in input_cols]
-        train_df_list = [all_df, lag1, lag1_diff, lag1_abs, lag1_sum]
-    else:
-        # add lookback
-        train_df_list = add_hist_data(all_df.loc[:, input_cols])
-
-    all_df = pd.concat(train_df_list, axis=1)
-
-    if dropna:
-        all_df.dropna(inplace=True)
-    else:
-        all_df.fillna(0, inplace=True)
-    all_df.reset_index(drop=True, inplace=True)
-
-    # update x cols
-    x_cols = [c for c in all_df.columns if c not in y_cols+[p_id,]]
-
-    # normalize x
-    scaler_x = MinMaxScaler()
-    all_df[x_cols] = scaler_x.fit_transform(all_df[x_cols])
-    logs = pd.DataFrame(np.log(all_df[x_cols]+1.5).values,
-                        columns=['{}_ln'.format(c) for c in x_cols])
-    all_df = pd.concat([all_df, logs], axis=1)
-
-    scaler_x2 = MinMaxScaler()
-    all_df[logs.columns] = scaler_x2.fit_transform(all_df[logs.columns])
-
-    # last update of x cols
-    x_cols = [c for c in all_df.columns if c not in y_cols + [p_id, ]]
-
-    # split train, test and validation set
-    train_df = all_df[~all_df[p_id].isin(testset+valset)]
-    test_df = all_df[all_df[p_id].isin(testset)]
-    val_df = all_df[all_df[p_id].isin(valset)]
-
-    if DEBUG:
-        train_df = train_df.iloc[:n_debug, :]
-        val_df = val_df.iloc[:n_debug, :]
-        test_df = test_df.iloc[:n_debug, :]
-
-    train_df.reset_index(drop=True, inplace=True)
-    test_df.reset_index(drop=True, inplace=True)
-    val_df.reset_index(drop=True, inplace=True)
-
-    return train_df, val_df, test_df
 
 
 def train_keras():
@@ -267,29 +186,38 @@ def train_linear():
     return np.transpose(np.array(preds))
 
 
-def train_extra_tree():
+def train_extra_tree(dm):
     from sklearn.ensemble import ExtraTreesRegressor
 
     print('train extra trees')
+    tra_df = dm.tra_df
+    tst_df = dm.tst_df
+    x_cols = dm.x_cols
     et = ExtraTreesRegressor()
-    et.fit(tra_df[x_cols], tra_df[y_cols])
+    et.fit(tra_df[x_cols], tra_df[dm.y_cols])
     return et.predict(tst_df[x_cols])
 
 
-def train_ridge():
+def train_ridge(dm):
     from sklearn.linear_model import Ridge
     print('train ridge')
+    tra_df = dm.tra_df
+    tst_df = dm.tst_df
+    x_cols = dm.x_cols
     ridge = Ridge(alpha=40)
-    ridge.fit(tra_df[x_cols], tra_df[y_cols])
+    ridge.fit(tra_df[x_cols], tra_df[dm.y_cols])
     return ridge.predict(tst_df[x_cols])
 
 
-def train_catboost():
+def train_catboost(dm):
     from catboost import CatBoostRegressor
 
     print('train catboost')
     preds = []
-    for target in y_cols:
+    tra_df = dm.tra_df
+    tst_df = dm.tst_df
+    x_cols = dm.x_cols
+    for target in dm.y_cols:
         cat = CatBoostRegressor()
         cat.fit(tra_df[x_cols], tra_df[target])
         preds.append(cat.predict(tst_df[x_cols]))
@@ -316,8 +244,8 @@ if __name__ == '__main__':
     from sklearn.metrics import mean_squared_error
     import matplotlib.pyplot as plt
     import seaborn
-    from sklearn.preprocessing import MinMaxScaler
-    from sklearn.model_selection import train_test_split
+
+    from kirgsn.data import DataManager
 
     os.system("taskset -p 0xffff %d" % os.getpid())  # reset core affinity
 
@@ -328,35 +256,17 @@ if __name__ == '__main__':
     else:
         DEBUG = cfg.debug_cfg['DEBUG']
     n_debug = cfg.debug_cfg['n_debug']
-    lookback = cfg.data_cfg['lookback']
-    p_id = cfg.data_cfg['profile_id_colname']
-    testset = cfg.data_cfg['testset']
-    valset = cfg.data_cfg['valset']
-    input_p_names = cfg.data_cfg['Input_param_names']
-    y_cols = cfg.data_cfg['Target_param_names']
+
     batch_size = cfg.keras_cfg['batch_size']
 
-    scaler_y = MinMaxScaler()
-    dataset = pd.read_csv(join('input', 'measures.csv'), dtype=np.float32)
-
-    orig_cols = [c for c in dataset.columns if c != p_id]
-
-    tra_df, val_df, tst_df = munge_data(dataset.copy())
-    # tra_df = pd.concat([tra_df, val_df], axis=0)
-
-    # determine feature columns
-    x_cols = []
-    for col in tra_df.columns:
-        for orig_input_param_name in input_p_names:
-            if orig_input_param_name in col:
-                x_cols.append(col)
-
-    # prepare target data
-    actual = \
-        dataset[dataset[p_id].isin(testset)].loc[:, y_cols]
-    actual.reset_index(drop=True, inplace=True)
-    if DEBUG:
-        actual = actual.iloc[:n_debug, :]
+    dm = DataManager(join('input', 'measures.csv'))
+    dm.predict_transformed_targets(np.sqrt, np.square)
+    dm.normalize_targets()
+    dm.add_stats_from_hist_data(lookback=60)
+    dm.add_lag_feats()
+    dm.normalize_features(dm.scaler_x_1)
+    dm.add_transformed_feats(np.log, 'ln')
+    dm.normalize_features(dm.scaler_x_2)
 
     # keras
     if cfg.keras_cfg['do_train']:
@@ -369,23 +279,25 @@ if __name__ == '__main__':
     # yhat = tpotting()
 
     # linear model
-    yhat = train_linear()
+    #yhat = train_linear()
 
     # extra trees
-    #yhat = train_extra_tree()
+    #yhat = train_extra_tree(dm=dm)
 
     # catboost
-    #yhat = train_catboost()
+    yhat = train_catboost(dm=dm)
 
     # ridge
-    #yhat = train_ridge()
-    #yhat = (yhat + yhat_ridge[:yhat.shape[0], :])/2
+    #yhat = train_ridge(dm=dm)
 
-    inversed_pred = pd.DataFrame(scaler_y.inverse_transform(yhat),
-                                 columns=y_cols)
-    inversed_pred = np.square(inversed_pred)
-    print('mse: {:.6} K²'.format(mean_squared_error(actual.values[
-                                                    :yhat.shape[0], :],
+    actual = dm.actual
+    inversed_pred = dm.inverse_prediction(yhat)
+    # trunc actual if prediction is shorter
+    if yhat.shape[0] != actual.shape[0]:
+        print('trunc actual from {} to {} samples'.format(actual.shape[0],
+                                                          yhat.shape[0]))
+        actual = actual.iloc[:yhat.shape[0], :]
+    print('mse: {:.6} K²'.format(mean_squared_error(actual.values,
                                                     inversed_pred)))
 
     # plots
@@ -394,6 +306,6 @@ if __name__ == '__main__':
             plt.subplot(211)
             plt.plot(hist['loss'])
             plt.plot(hist['val_loss'])
-        plt.subplot(212)
+            plt.subplot(212)
         plot_results(actual, inversed_pred)
 
