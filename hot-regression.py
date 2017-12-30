@@ -200,11 +200,19 @@ def train_extra_tree(dm):
 
 def train_ridge(dm):
     from sklearn.linear_model import Ridge
+    from sklearn.pipeline import make_pipeline
+    from sklearn.preprocessing import PolynomialFeatures
+    from sklearn.svm import SVR
     print('train ridge')
     tra_df = dm.tra_df
     tst_df = dm.tst_df
     x_cols = dm.x_cols
-    ridge = Ridge(alpha=40)
+    ridge = make_pipeline(
+        #PolynomialFeatures(degree=2, include_bias=False,
+         #                  interaction_only=True),
+        Ridge(alpha=50000)
+    )
+
     ridge.fit(tra_df[x_cols], tra_df[dm.y_cols])
     return ridge.predict(tst_df[x_cols])
 
@@ -219,6 +227,20 @@ def train_catboost(dm):
     x_cols = dm.x_cols
     for target in dm.y_cols:
         cat = CatBoostRegressor()
+        cat.fit(tra_df[x_cols], tra_df[target])
+        preds.append(cat.predict(tst_df[x_cols]))
+    return np.transpose(np.array(preds))
+
+
+def train_SVR(dm):
+    from sklearn.svm import SVR
+
+    preds = []
+    tra_df = dm.tra_df
+    tst_df = dm.tst_df
+    x_cols = dm.x_cols
+    for target in dm.y_cols:
+        cat = SVR(C=1.0)
         cat.fit(tra_df[x_cols], tra_df[target])
         preds.append(cat.predict(tst_df[x_cols]))
     return np.transpose(np.array(preds))
@@ -262,7 +284,7 @@ if __name__ == '__main__':
     dm = DataManager(join('input', 'measures.csv'))
     dm.predict_transformed_targets(np.sqrt, np.square)
     dm.normalize_targets()
-    dm.add_stats_from_hist_data(lookback=60)
+    dm.add_stats_from_hist_data(lookback=10)
     dm.add_lag_feats()
     dm.normalize_features(dm.scaler_x_1)
     dm.add_transformed_feats(np.log, 'ln')
@@ -285,10 +307,13 @@ if __name__ == '__main__':
     #yhat = train_extra_tree(dm=dm)
 
     # catboost
-    yhat = train_catboost(dm=dm)
+    #yhat = train_catboost(dm=dm)
 
     # ridge
     #yhat = train_ridge(dm=dm)
+
+    # SVR
+    yhat = train_SVR(dm=dm)
 
     actual = dm.actual
     inversed_pred = dm.inverse_prediction(yhat)

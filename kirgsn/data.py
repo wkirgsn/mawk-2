@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 
 import config as cfg
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 
 class DataManager:
