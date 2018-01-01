@@ -14,15 +14,20 @@ class DataManager:
 
     def __init__(self, path):
         # scalers
-        self.scaler_x_1 = MinMaxScaler()
+        self.scaler_x_1 = StandardScaler()
         self.scaler_x_2 = MinMaxScaler()
-        self.scaler_y = MinMaxScaler()
+        self.scaler_y = StandardScaler()
 
         # original data
         self.dataset = pd.read_csv(path, dtype=np.float32)
+        # downsample
+        #self.dataset = self.dataset.iloc[::2, :]
+        # drop profiles
+        """drop_p = ['11', ]
+        self.dataset.drop(axis=1, inplace=True, index=self.dataset[self.dataset[
+            self.PROFILE_ID_COL].isin(drop_p)].index)"""
         # feature engineered dataset
         self.df = self.dataset.copy()
-
         # target transformation
         self.target_untrans_func = None
 
@@ -45,7 +50,8 @@ class DataManager:
     @property
     def tra_df(self):
         sub_df = self.df[~self.df[self.PROFILE_ID_COL].isin(
-            cfg.data_cfg['testset'] + cfg.data_cfg['valset'])]
+            cfg.data_cfg['testset']# + cfg.data_cfg['valset']
+        )]
         return sub_df.reset_index(drop=True)
 
     @property
@@ -79,30 +85,32 @@ class DataManager:
             self.scaler_y.fit_transform(self.df[self.y_cols])
 
     def normalize_features(self, scaler):
+        #todo: only fit on training data!
         x_cols = self.x_cols
         self.df[x_cols] = scaler.fit_transform(self.df[x_cols])
 
     def add_lag_feats(self, lookback=1):
-        input_cols = self.x_cols
+        input_cols = cfg.data_cfg['Input_param_names']
         train_feats = self.df.loc[:, input_cols]
-        lag_feats = {'lag{}': train_feats.shift(lookback),
-                     'lag{}_diff': train_feats.diff(),
-                     }
-        lag_feats['lag{}_abs'] = abs(lag_feats['lag{}_diff'])
-        lag_feats['lag{}_sum'] = train_feats + lag_feats['lag{}']
+        for lback in range(1, lookback+1):
+            lag_feats = {'lag{}': train_feats.shift(lback),
+                         'lag{}_diff': train_feats.diff(periods=lback),
+                         }
+            lag_feats['lag{}_abs'] = abs(lag_feats['lag{}_diff'])
+            lag_feats['lag{}_sum'] = train_feats + lag_feats['lag{}']
 
-        lag_feats = {key.format(lookback): value for key, value
-                     in lag_feats.items()}
-        # update columns
-        for k in lag_feats:
-            lag_feats[k].columns = ['{}_{}'.format(c, k) for c in input_cols]
-        # add to dataset
-        self.df = pd.concat([self.df, ] + list(lag_feats.values()), axis=1)
+            lag_feats = {key.format(lback): value for key, value
+                         in lag_feats.items()}
+            # update columns
+            for k in lag_feats:
+                lag_feats[k].columns = ['{}_{}'.format(c, k) for c in input_cols]
+            # add to dataset
+            self.df = pd.concat([self.df, ] + list(lag_feats.values()), axis=1)
         self.dropna()
 
     def add_transformed_feats(self, trans_func, lbl):
         """transform the current features with given transformation function"""
-        x_cols = self.x_cols
+        x_cols = cfg.data_cfg['Input_param_names']
         trans_df = pd.DataFrame(trans_func(self.df[x_cols] + 1.5).values,
                                 columns=['{}_{}'.format(c, lbl) for c
                                          in x_cols])
@@ -110,10 +118,11 @@ class DataManager:
 
     def add_stats_from_hist_data(self, lookback=10):
         """add previous x data point statistics"""
-        cols = self.x_cols
+        cols = cfg.data_cfg['Input_param_names']
         feat_d = {'std': self.df[cols].rolling(lookback).std(),
                   'mean': self.df[cols].rolling(lookback).mean(),
-                  'sum': self.df[cols].rolling(lookback).sum()}
+                  #'sum': self.df[cols].rolling(lookback).sum()
+                  }
         for k in feat_d:
             feat_d[k].columns = ['{}_rolling{}_{}'.format(c, lookback, k) for
                                  c in cols]
@@ -126,3 +135,11 @@ class DataManager:
         if self.target_untrans_func is not None:
             inversed = self.target_untrans_func(inversed)
         return inversed
+
+    def plot(self):
+        from pandas.plotting import autocorrelation_plot
+        import matplotlib.pyplot as plt
+        self.df[[c for c in self.x_cols if 'rolling' in c] +
+                self.y_cols].plot(subplots=True,
+                                                      sharex=True)
+        plt.show()

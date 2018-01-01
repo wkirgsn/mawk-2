@@ -202,15 +202,14 @@ def train_ridge(dm):
     from sklearn.linear_model import Ridge
     from sklearn.pipeline import make_pipeline
     from sklearn.preprocessing import PolynomialFeatures
-    from sklearn.svm import SVR
     print('train ridge')
     tra_df = dm.tra_df
     tst_df = dm.tst_df
     x_cols = dm.x_cols
     ridge = make_pipeline(
-        #PolynomialFeatures(degree=2, include_bias=False,
-         #                  interaction_only=True),
-        Ridge(alpha=50000)
+        PolynomialFeatures(degree=2, include_bias=False,
+                           interaction_only=True),
+        Ridge(alpha=100)
     )
 
     ridge.fit(tra_df[x_cols], tra_df[dm.y_cols])
@@ -234,7 +233,7 @@ def train_catboost(dm):
 
 def train_SVR(dm):
     from sklearn.svm import SVR
-
+    print('Train SVR')
     preds = []
     tra_df = dm.tra_df
     tst_df = dm.tst_df
@@ -284,11 +283,13 @@ if __name__ == '__main__':
     dm = DataManager(join('input', 'measures.csv'))
     dm.predict_transformed_targets(np.sqrt, np.square)
     dm.normalize_targets()
-    dm.add_stats_from_hist_data(lookback=10)
     dm.add_lag_feats()
+    dm.add_stats_from_hist_data(lookback=10)
     dm.normalize_features(dm.scaler_x_1)
-    dm.add_transformed_feats(np.log, 'ln')
-    dm.normalize_features(dm.scaler_x_2)
+   # dm.plot()
+
+    #dm.add_transformed_feats(np.log, 'ln')
+    #dm.normalize_features(dm.scaler_x_2)
 
     # keras
     if cfg.keras_cfg['do_train']:
@@ -310,10 +311,10 @@ if __name__ == '__main__':
     #yhat = train_catboost(dm=dm)
 
     # ridge
-    #yhat = train_ridge(dm=dm)
+    yhat = train_ridge(dm=dm)
 
     # SVR
-    yhat = train_SVR(dm=dm)
+    #yhat = train_SVR(dm=dm)
 
     actual = dm.actual
     inversed_pred = dm.inverse_prediction(yhat)
