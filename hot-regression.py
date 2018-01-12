@@ -14,7 +14,6 @@ warnings.filterwarnings("ignore")
 np.random.seed(2017)
 
 # todo: xgb, lgbm attempts
-# todo: taskset only if not 0xfff
 # todo: save train trend history for visualizing
 # todo: apply bayesian opt for hyperparams
 
@@ -44,9 +43,6 @@ def train_keras():
     from keras import regularizers
     from keras.callbacks import EarlyStopping
     from keras import __version__ as keras_version
-
-    from joblib import Parallel, delayed
-    from multiprocessing import cpu_count
 
     print('Keras version: {}'.format(keras_version))
     n_neurons = cfg.keras_cfg['n_neurons']
@@ -96,8 +92,8 @@ def train_keras():
 
             df_X.reset_index(drop=True, inplace=True)
             df_Y.reset_index(drop=True, inplace=True)
-            df_X.drop(['new_idx', ], axis=1, inplace=True)
-            df_Y.drop(['new_idx', ], axis=1, inplace=True)
+            df_X.drop(['new_idx'], axis=1, inplace=True)
+            df_Y.drop(['new_idx'], axis=1, inplace=True)
 
         x_mat = df_X.as_matrix()
         y_mat = df_Y.as_matrix()
@@ -199,9 +195,7 @@ def train_extra_tree(dm):
 
 
 def train_ridge(dm):
-    from sklearn.linear_model import Ridge
-    from sklearn.pipeline import make_pipeline
-    from sklearn.preprocessing import PolynomialFeatures
+
     print('train ridge')
     tra_df = dm.tra_df
     tst_df = dm.tst_df
@@ -245,6 +239,31 @@ def train_SVR(dm):
     return np.transpose(np.array(preds))
 
 
+def plot_val_curves(train_scores, test_scores, param_range):
+    train_scores_mean = np.mean(train_scores, axis=1)
+    train_scores_std = np.std(train_scores, axis=1)
+    test_scores_mean = np.mean(test_scores, axis=1)
+    test_scores_std = np.std(test_scores, axis=1)
+
+    plt.title("Validation Curve with SVM")
+    plt.xlabel("alpha")
+    plt.ylabel("Score MSE")
+    # plt.ylim(0.0, 1.1)
+    lw = 2
+    plt.semilogx(param_range, train_scores_mean, label="Training score",
+                 color="darkorange", lw=lw)
+    plt.fill_between(param_range, train_scores_mean - train_scores_std,
+                     train_scores_mean + train_scores_std, alpha=0.2,
+                     color="darkorange", lw=lw)
+    plt.semilogx(param_range, test_scores_mean, label="Cross-validation score",
+                 color="navy", lw=lw)
+    plt.fill_between(param_range, test_scores_mean - test_scores_std,
+                     test_scores_mean + test_scores_std, alpha=0.2,
+                     color="navy", lw=lw)
+    plt.legend(loc="best")
+    plt.show()
+
+
 def plot_results(y, yhat):
     plt.plot(y)
     plt.plot(yhat)
@@ -262,13 +281,16 @@ if __name__ == '__main__':
 
     import pandas as pd
     from tpot import TPOTRegressor
-    from sklearn.metrics import mean_squared_error
+    from sklearn.metrics import mean_squared_error, make_scorer
     import matplotlib.pyplot as plt
     import seaborn
-
+    from sklearn.linear_model import Ridge, Lasso, LassoLars, ElasticNet
+    from sklearn.pipeline import make_pipeline, Pipeline
+    from sklearn.preprocessing import PolynomialFeatures, StandardScaler
+    from sklearn.model_selection import validation_curve
     from kirgsn.data import DataManager
 
-    os.system("taskset -p 0xffff %d" % os.getpid())  # reset core affinity
+    # os.system("taskset -p 0xffff %d" % os.getpid())  # reset core affinity
 
     # config
     gpu_available = len(get_available_gpus()) >= 1
@@ -277,19 +299,34 @@ if __name__ == '__main__':
     else:
         DEBUG = cfg.debug_cfg['DEBUG']
     n_debug = cfg.debug_cfg['n_debug']
-
     batch_size = cfg.keras_cfg['batch_size']
 
-    dm = DataManager(join('input', 'measures.csv'))
-    dm.predict_transformed_targets(np.sqrt, np.square)
-    dm.normalize_targets()
-    dm.add_lag_feats()
-    dm.add_stats_from_hist_data(lookback=10)
-    dm.normalize_features(dm.scaler_x_1)
-   # dm.plot()
+    model_pool = {'': ''}
 
-    #dm.add_transformed_feats(np.log, 'ln')
-    #dm.normalize_features(dm.scaler_x_2)
+    dm = DataManager(join('input', 'measures.csv'))
+
+    # featurize dataset (feature engineering)
+    tra_df, val_df, tst_df = dm.get_featurized_sets()
+
+    # build pipeline
+    pipe = make_pipeline(PolynomialFeatures(degree=2,
+                                            include_bias=False,
+                                            interaction_only=True),
+                         Ridge(alpha=10**4))
+    param_range = np.logspace(-3, 4)
+    tra_scores, tst_scores = validation_curve(pipe,
+                                              tra_df[dm.cl.x_cols],
+                                              tra_df[dm.cl.y_cols],
+                                              param_name='ridge__alpha',
+                                              param_range=param_range,
+                                              cv=5,
+                                              scoring=
+                                              make_scorer(mean_squared_error)
+                                              )
+    plot_val_curves(tra_scores, tst_scores, param_range)
+    """
+    pipe.fit(tra_df[dm.cl.x_cols], tra_df[dm.cl.y_cols])
+    yhat = pipe.predict(tst_df[dm.cl.x_cols])
 
     # keras
     if cfg.keras_cfg['do_train']:
@@ -298,33 +335,16 @@ if __name__ == '__main__':
         yhat = pd.DataFrame(yhat, columns=y_cols, index=tst_idx).sort_index()
         yhat = yhat.values
 
-    # tpot
-    # yhat = tpotting()
-
-    # linear model
-    #yhat = train_linear()
-
-    # extra trees
-    #yhat = train_extra_tree(dm=dm)
-
-    # catboost
-    #yhat = train_catboost(dm=dm)
-
-    # ridge
-    yhat = train_ridge(dm=dm)
-
-    # SVR
-    #yhat = train_SVR(dm=dm)
-
     actual = dm.actual
     inversed_pred = dm.inverse_prediction(yhat)
     # trunc actual if prediction is shorter
     if yhat.shape[0] != actual.shape[0]:
         print('trunc actual from {} to {} samples'.format(actual.shape[0],
                                                           yhat.shape[0]))
-        actual = actual.iloc[:yhat.shape[0], :]
+        offset = actual.shape[0] - yhat.shape[0]
+        actual = actual.iloc[offset:, :]
     print('mse: {:.6} K²'.format(mean_squared_error(actual.values,
-                                                    inversed_pred)))
+                                                    inversed_pred.values)))
 
     # plots
     if cfg.plot_cfg['do_plot']:
@@ -334,4 +354,4 @@ if __name__ == '__main__':
             plt.plot(hist['val_loss'])
             plt.subplot(212)
         plot_results(actual, inversed_pred)
-
+    """
