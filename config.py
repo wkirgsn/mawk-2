@@ -5,23 +5,26 @@ debug_cfg = {'DEBUG': False,
              }
 
 data_cfg = {
-    'Input_param_names': ['ambient',
-                          'coolant',
+    'Input_param_names': [#'ambient',
+                          #'coolant',
                           'u_d',
                           'u_q',
                           'motor_speed',
                           'torque',
                           'i_d',
-                          'i_q'],
+                          'i_q'
+                           ],
     'Target_param_names': ['pm',
                            'stator_yoke',
                            'stator_tooth',
                            'stator_winding'],
-    'profile_id_colname': 'profile_id',
     'lookback': 1,
     'valset': ['31', ],
     'testset': ['20', ],
-    'loadsets': ['4', '6', '10', '11', '20', '27', '29', '30',
+    'loadsets': ['4', '6',
+                 '10', '11',
+                 '20', '27',
+                 '29', '30',
                  '31', '32', '36'],
     }
 
@@ -30,7 +33,7 @@ path_cfg = {
                  "/all_load_profiles",
 }
 
-plot_cfg = {'do_plot': False, }
+plot_cfg = {'do_plot': True, }
 
 keras_cfg = {
     'do_train': False,
