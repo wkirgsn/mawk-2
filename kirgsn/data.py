@@ -1,16 +1,31 @@
 """
 Author: Kirgsn, 2017, https://www.kaggle.com/wkirgsn
 """
+import time
+
 import numpy as np
 import pandas as pd
-
-import config as cfg
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.pipeline import FeatureUnion, Pipeline, make_pipeline, make_union
 from sklearn.base import BaseEstimator, TransformerMixin
 
+import config as cfg
+
+
+def measure_time(func):
+    """time measuring decorator"""
+    def wrapped(*args, **kwargs):
+        start_time = time.time()
+        ret = func(*args, **kwargs)
+        end_time = time.time()
+        print('took {} seconds'.format(end_time-start_time))
+        return ret
+    return wrapped
+
 
 class ColumnManager:
+    """Class to keep track of the current input columns and for general
+    economy of features"""
     def __init__(self, df):
         self.original = df.columns
         self._x, self._y = None, cfg.data_cfg['Target_param_names']
@@ -75,10 +90,13 @@ class DataManager:
                                                           np.square,
                                                           self.cl.y_cols
                                                           )),
+                                        ('identity_x', SimpleTransformer(
+                                            None, None, self.cl.x_cols)),
                                        ('lag_feats_x',
                                         LagFeatures(self.cl.x_cols)),
                                        ('rolling_feats_x',
-                                        RollingFeatures(self.cl.x_cols))
+                                        RollingFeatures(self.cl.x_cols,
+                                                        lookback=10))
                                        ])
 
         featurize_pipe = FeatureUnionReframer.make_df_retaining(featurize_union)
@@ -126,6 +144,7 @@ class DataManager:
                                                             'testset'])]
         return sub_df[self.cl.y_cols].reset_index(drop=True)
 
+    @measure_time
     def get_featurized_sets(self):
         tra_df = self.tra_df
         tst_df = self.tst_df
@@ -172,10 +191,11 @@ class SimpleTransformer(BaseEstimator, TransformerMixin):
 
     def transform(self, x):
         x = self._get_selection(x)
-        return self.transform_func(x)
+        return self.transform_func(x) if callable(self.transform_func) else x
 
     def inverse_transform(self, x):
-        return self.inverse_transform_func(x)
+        return self.inverse_transform_func(x) \
+            if callable(self.inverse_transform_func) else x
 
     def _get_selection(self, df):
         assert isinstance(df, pd.DataFrame)

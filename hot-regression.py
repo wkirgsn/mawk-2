@@ -158,30 +158,6 @@ def tpotting():
     return pd.DataFrame({c: x for c, x in zip(output_p_names, preds)})
 
 
-def train_linear():
-    from sklearn.decomposition import PCA
-    from sklearn.pipeline import make_pipeline
-    from sklearn.preprocessing import PolynomialFeatures
-    from sklearn.kernel_approximation import Nystroem
-    from sklearn.linear_model import ElasticNetCV, LogisticRegression
-
-    print('train')
-
-    preds = []
-    for target in y_cols:
-        """lr_model = \
-            make_pipeline(
-                PolynomialFeatures(degree=2, include_bias=False,
-                                   interaction_only=False),
-                PCA(iterated_power=4, svd_solver="randomized"),
-                ElasticNetCV(l1_ratio=0.25, tol=0.001)
-            )"""
-        lr_model = ElasticNetCV()
-        lr_model.fit(tra_df[x_cols], tra_df[target])
-        preds.append(lr_model.predict(tst_df[x_cols]))
-    return np.transpose(np.array(preds))
-
-
 def train_extra_tree(dm):
     from sklearn.ensemble import ExtraTreesRegressor
 
@@ -192,22 +168,6 @@ def train_extra_tree(dm):
     et = ExtraTreesRegressor()
     et.fit(tra_df[x_cols], tra_df[dm.y_cols])
     return et.predict(tst_df[x_cols])
-
-
-def train_ridge(dm):
-
-    print('train ridge')
-    tra_df = dm.tra_df
-    tst_df = dm.tst_df
-    x_cols = dm.x_cols
-    ridge = make_pipeline(
-        PolynomialFeatures(degree=2, include_bias=False,
-                           interaction_only=True),
-        Ridge(alpha=100)
-    )
-
-    ridge.fit(tra_df[x_cols], tra_df[dm.y_cols])
-    return ridge.predict(tst_df[x_cols])
 
 
 def train_catboost(dm):
@@ -265,8 +225,8 @@ def plot_val_curves(train_scores, test_scores, param_range):
 
 
 def plot_results(y, yhat):
-    plt.plot(y)
-    plt.plot(yhat)
+    plt.plot(y, alpha=0.6, color='darkorange')
+    plt.plot(yhat, lw=2, color='navy')
     plt.show()
 
 
@@ -288,6 +248,8 @@ if __name__ == '__main__':
     from sklearn.pipeline import make_pipeline, Pipeline
     from sklearn.preprocessing import PolynomialFeatures, StandardScaler
     from sklearn.model_selection import validation_curve
+    from sklearn.feature_selection import SelectFromModel
+
     from kirgsn.data import DataManager
 
     # os.system("taskset -p 0xffff %d" % os.getpid())  # reset core affinity
@@ -308,25 +270,37 @@ if __name__ == '__main__':
     # featurize dataset (feature engineering)
     tra_df, val_df, tst_df = dm.get_featurized_sets()
 
+    # tpot
+    tpot = TPOTRegressor(verbosity=2, cv=2, random_state=2017,
+                         n_jobs=1,
+                         periodic_checkpoint_folder=
+                         'out/tpot_periodic_checkpoint')
+
+
     # build pipeline
     pipe = make_pipeline(PolynomialFeatures(degree=2,
                                             include_bias=False,
                                             interaction_only=True),
-                         Ridge(alpha=10**4))
-    param_range = np.logspace(-3, 4)
+                         # SelectFromModel(Ridge(10**2)),
+                         tpot
+                         )
+
+    """param_range = np.logspace(-3, 4, num=8)
     tra_scores, tst_scores = validation_curve(pipe,
                                               tra_df[dm.cl.x_cols],
                                               tra_df[dm.cl.y_cols],
-                                              param_name='ridge__alpha',
+                                              param_name='lasso__alpha',
                                               param_range=param_range,
                                               cv=5,
                                               scoring=
-                                              make_scorer(mean_squared_error)
+                                              make_scorer(mean_squared_error),
+                                              verbose=5, n_jobs=1
                                               )
     plot_val_curves(tra_scores, tst_scores, param_range)
     """
-    pipe.fit(tra_df[dm.cl.x_cols], tra_df[dm.cl.y_cols])
+    pipe.fit(tra_df[dm.cl.x_cols], tra_df[dm.cl.y_cols[0]])
     yhat = pipe.predict(tst_df[dm.cl.x_cols])
+    tpot.export('out/tpotted.py')
 
     # keras
     if cfg.keras_cfg['do_train']:
@@ -354,4 +328,4 @@ if __name__ == '__main__':
             plt.plot(hist['val_loss'])
             plt.subplot(212)
         plot_results(actual, inversed_pred)
-    """
+
