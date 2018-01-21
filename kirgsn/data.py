@@ -146,6 +146,7 @@ class DataManager:
 
     @measure_time
     def get_featurized_sets(self):
+        print('build dataset..')
         tra_df = self.tra_df
         tst_df = self.tst_df
         val_df = self.val_df

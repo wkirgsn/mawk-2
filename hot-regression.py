@@ -146,6 +146,7 @@ def train_keras():
 
 
 def tpotting():
+    """deprecated"""
     preds = []
     for target in output_p_names:
         tpot = TPOTRegressor(verbosity=2, cv=5, random_state=2017,
@@ -210,12 +211,12 @@ def plot_val_curves(train_scores, test_scores, param_range):
     plt.ylabel("Score MSE")
     # plt.ylim(0.0, 1.1)
     lw = 2
-    plt.semilogx(param_range, train_scores_mean, label="Training score",
+    plt.plot(param_range, train_scores_mean, label="Training score",
                  color="darkorange", lw=lw)
     plt.fill_between(param_range, train_scores_mean - train_scores_std,
                      train_scores_mean + train_scores_std, alpha=0.2,
                      color="darkorange", lw=lw)
-    plt.semilogx(param_range, test_scores_mean, label="Cross-validation score",
+    plt.plot(param_range, test_scores_mean, label="Cross-validation score",
                  color="navy", lw=lw)
     plt.fill_between(param_range, test_scores_mean - test_scores_std,
                      test_scores_mean + test_scores_std, alpha=0.2,
@@ -240,15 +241,20 @@ if __name__ == '__main__':
     multiprocessing.set_start_method('forkserver')
 
     import pandas as pd
-    from tpot import TPOTRegressor
+    #from tpot import TPOTRegressor
     from sklearn.metrics import mean_squared_error, make_scorer
     import matplotlib.pyplot as plt
     import seaborn
-    from sklearn.linear_model import Ridge, Lasso, LassoLars, ElasticNet
+    from sklearn.decomposition import PCA
+    from sklearn.linear_model import Ridge, Lasso, LassoLarsCV, ElasticNet
     from sklearn.pipeline import make_pipeline, Pipeline
-    from sklearn.preprocessing import PolynomialFeatures, StandardScaler
-    from sklearn.model_selection import validation_curve
-    from sklearn.feature_selection import SelectFromModel
+    from sklearn.preprocessing import PolynomialFeatures, StandardScaler, MinMaxScaler
+    from sklearn.model_selection import validation_curve, TimeSeriesSplit
+    from sklearn.feature_selection import SelectFromModel, SelectPercentile, \
+        f_regression
+    from sklearn.ensemble import ExtraTreesRegressor
+    from sklearn.tree import ExtraTreeRegressor
+    from catboost import CatBoostRegressor
 
     from kirgsn.data import DataManager
 
@@ -270,37 +276,32 @@ if __name__ == '__main__':
     # featurize dataset (feature engineering)
     tra_df, val_df, tst_df = dm.get_featurized_sets()
 
-    # tpot
-    tpot = TPOTRegressor(verbosity=2, cv=2, random_state=2017,
-                         n_jobs=1,
-                         periodic_checkpoint_folder=
-                         'out/tpot_periodic_checkpoint')
-
-
     # build pipeline
     pipe = make_pipeline(PolynomialFeatures(degree=2,
                                             include_bias=False,
                                             interaction_only=True),
-                         # SelectFromModel(Ridge(10**2)),
-                         tpot
+                         ExtraTreesRegressor(max_depth=1)
                          )
-
-    """param_range = np.logspace(-3, 4, num=8)
+    """
+    param_range = np.linspace(1, 10, num=10)
+    tscv = TimeSeriesSplit(n_splits=3)
     tra_scores, tst_scores = validation_curve(pipe,
                                               tra_df[dm.cl.x_cols],
                                               tra_df[dm.cl.y_cols],
-                                              param_name='lasso__alpha',
+                                              param_name='extratreesregressor__max_depth',
                                               param_range=param_range,
-                                              cv=5,
+                                              cv=tscv,
                                               scoring=
                                               make_scorer(mean_squared_error),
-                                              verbose=5, n_jobs=1
+                                              verbose=5, n_jobs=2
                                               )
     plot_val_curves(tra_scores, tst_scores, param_range)
     """
-    pipe.fit(tra_df[dm.cl.x_cols], tra_df[dm.cl.y_cols[0]])
-    yhat = pipe.predict(tst_df[dm.cl.x_cols])
-    tpot.export('out/tpotted.py')
+    yhat = []
+    for t in dm.cl.y_cols:
+        pipe.fit(tra_df[dm.cl.x_cols], tra_df[t])
+        yhat.append(pipe.predict(tst_df[dm.cl.x_cols]).reshape((-1, 1)))
+    yhat = np.hstack(yhat)
 
     # keras
     if cfg.keras_cfg['do_train']:
@@ -328,4 +329,3 @@ if __name__ == '__main__':
             plt.plot(hist['val_loss'])
             plt.subplot(212)
         plot_results(actual, inversed_pred)
-
