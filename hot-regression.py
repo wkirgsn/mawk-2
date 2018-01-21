@@ -272,7 +272,7 @@ if __name__ == '__main__':
 
     # tpot
     tpot = TPOTRegressor(verbosity=2, cv=2, random_state=2017,
-                         n_jobs=1,
+                         n_jobs=10,
                          periodic_checkpoint_folder=
                          'out/tpot_periodic_checkpoint')
 

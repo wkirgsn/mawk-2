@@ -33,7 +33,7 @@ path_cfg = {
                  "/all_load_profiles",
 }
 
-plot_cfg = {'do_plot': True, }
+plot_cfg = {'do_plot': False, }
 
 keras_cfg = {
     'do_train': False,
