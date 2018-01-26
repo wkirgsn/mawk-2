@@ -277,10 +277,10 @@ if __name__ == '__main__':
     tra_df, val_df, tst_df = dm.get_featurized_sets()
 
     # build pipeline
-    pipe = make_pipeline(PolynomialFeatures(degree=2,
+    pipe = make_pipeline(PolynomialFeatures(degree=3,
                                             include_bias=False,
                                             interaction_only=True),
-                         ExtraTreesRegressor(max_depth=1)
+                         Ridge()
                          )
     """
     param_range = np.linspace(1, 10, num=10)
