@@ -5,7 +5,8 @@ import time
 
 import numpy as np
 import pandas as pd
-from sklearn.preprocessing import MinMaxScaler, StandardScaler
+from sklearn.preprocessing import MinMaxScaler, StandardScaler,\
+    PolynomialFeatures
 from sklearn.pipeline import FeatureUnion, Pipeline, make_pipeline, make_union
 from sklearn.base import BaseEstimator, TransformerMixin
 
@@ -94,9 +95,9 @@ class DataManager:
                                             None, None, self.cl.x_cols)),
                                        ('lag_feats_x',
                                         LagFeatures(self.cl.x_cols)),
-                                       ('rolling_feats_x',
-                                        RollingFeatures(self.cl.x_cols,
-                                                        lookback=10))
+                                       #('rolling_feats_x',
+                                        #RollingFeatures(self.cl.x_cols,
+                                         #               lookback=10))
                                        ])
 
         featurize_pipe = FeatureUnionReframer.make_df_retaining(featurize_union)
@@ -113,6 +114,7 @@ class DataManager:
             ('feat_engineer', featurize_pipe),
             ('cleaning', DFCleaner()),
             ('scaler', scaling_pipe),
+            ('poly', Polynomials(degree=2)),
             ('ident', IdentityEstimator())
         ])
 
@@ -160,11 +162,17 @@ class DataManager:
         return tra_df, val_df, tst_df
 
     def inverse_prediction(self, pred):
-        simple_transformer = {k: v for k, v in self.pipe.named_steps[
-            'feat_engineer'].named_steps['union'].transformer_list}['simple_trans_y']
+        simple_transformer = {k: v for k, v in
+                              self.pipe
+                                  .named_steps['feat_engineer']
+                                  .named_steps['union']
+                                  .transformer_list}['simple_trans_y']
 
-        scaler = {k: v for k, v in self.pipe.named_steps[
-            'scaler'].named_steps['union'].transformer_list}['scaler_y']
+        scaler = {k: v for k, v in
+                  self.pipe
+                      .named_steps['scaler']
+                      .named_steps['union']
+                      .transformer_list}['scaler_y']
 
         reduced_pipe = make_pipeline(simple_transformer, scaler)
 
@@ -277,6 +285,62 @@ class RollingFeatures(BaseEstimator, TransformerMixin):
 
     def get_feature_names(self):
         return self.transformed_cols
+
+
+class ReSamplerForBatchTraining(BaseEstimator, TransformerMixin):
+    """This transformer sorts the samples according to a
+    batch size for batch training"""
+    def __init__(self, batch_size):
+        self.batch_size = batch_size
+        self.indices, self.columns = [], []
+
+    def fit(self, X, y=None):
+        return self
+
+    def transform(self, X):
+        assert isinstance(X, pd.DataFrame)
+        # cut the tail
+        trunc_idx = len(X) % self.batch_size
+        X = X.iloc[:-trunc_idx, :]
+
+        # reorder
+        new_idcs = np.tile(np.arange(self.batch_size), len(X) //
+                           self.batch_size)
+        assert len(X) == new_idcs.shape[0], \
+            "{} != {}".format(len(X), new_idcs.shape[0])
+        X['new_idx'] = new_idcs
+        X.sort_values(by='new_idx', ascending=True, inplace=True)
+        self.indices = X.index
+        X.reset_index(drop=True, inplace=True)
+        X.drop(['new_idx'], axis=1, inplace=True)
+        self.columns = X.columns
+        return X
+
+    def inverse_transform(self, X):
+        inversed = pd.DataFrame(X, columns=self.columns, index=self.indices)\
+            .sort_index()
+        return inversed
+
+
+class Polynomials(BaseEstimator, TransformerMixin):
+
+    def __init__(self, degree):
+        self.poly = PolynomialFeatures(degree=degree)
+        self.out_cols = []
+
+    def fit(self, X, y=None):
+        assert isinstance(X, pd.DataFrame)
+        self.poly.fit(X, y)
+        self.out_cols = self.poly.get_feature_names(input_features=X.columns)
+        return self
+
+    def transform(self, X):
+        """This transform shall only take Input that has the same columns as
+        those this transformer had during fit"""
+        assert isinstance(X, pd.DataFrame)
+        X = self.poly.transform(X)
+        ret = pd.DataFrame(X, columns=self.out_cols)
+        return ret
 
 
 class DFCleaner(BaseEstimator, TransformerMixin):

@@ -35,13 +35,52 @@ def _prll_create_dataset(idx, obs, data, x_cols, y_cols):
            data.loc[idx + obs, y_cols].as_matrix()
 
 
+def build_keras_model(x_shape=(100, 1, 10)):
+    from keras.models import Sequential
+    from keras.layers import LSTM, GRU, CuDNNLSTM, CuDNNGRU, SimpleRNN
+    from keras.layers.core import Dense, Dropout, Flatten
+    from keras.optimizers import SGD
+    from keras import regularizers
+    from keras import __version__ as keras_version
+
+    print('Keras version: {}'.format(keras_version))
+    n_neurons = cfg.keras_cfg['n_neurons']
+    n_epochs = cfg.keras_cfg['n_epochs']
+    arch_dict = {'lstm': LSTM, 'gru': GRU, 'rnn': SimpleRNN}
+    arch_dict_cudnn = {'lstm': CuDNNLSTM, 'gru': CuDNNGRU, 'rnn': SimpleRNN}
+    if gpu_available:
+        ANN = arch_dict_cudnn[cfg.keras_cfg['arch']]
+    else:
+        ANN = arch_dict[cfg.keras_cfg['arch']]
+
+    # create model
+    model = Sequential()
+    model.add(
+        ANN(n_neurons,
+            # implementation=2,  # only known by non-CUDNN classes
+            batch_input_shape=(batch_size, x_shape[1], x_shape[2]),
+            kernel_regularizer=regularizers.l2(cfg.train_cfg['l2_reg_w']),
+            activity_regularizer=regularizers.l2(cfg.train_cfg['l2_reg_w']),
+            recurrent_regularizer=regularizers.l2(
+                cfg.train_cfg['l2_reg_w']),
+            stateful=True,
+            ))
+    model.add(Dropout(0.5))
+    model.add(Dense(16))
+    model.add(Dropout(0.5))
+    model.add(Dense(4))
+
+    model.compile(optimizer='adam', loss='mse')
+    return model
+
+
 def train_keras():
     from keras.models import Sequential
     from keras.layers import LSTM, GRU, CuDNNLSTM, CuDNNGRU, SimpleRNN
     from keras.layers.core import Dense, Dropout, Flatten
     from keras.optimizers import SGD
     from keras import regularizers
-    from keras.callbacks import EarlyStopping
+    from keras.callbacks import EarlyStopping, LearningRateScheduler
     from keras import __version__ as keras_version
 
     print('Keras version: {}'.format(keras_version))
@@ -126,6 +165,8 @@ def train_keras():
             stateful=True,
             ))
     model.add(Dropout(0.5))
+    model.add(Dense(16))
+    model.add(Dropout(0.5))
     model.add(Dense(4))
 
     callbacks = [
@@ -135,6 +176,8 @@ def train_keras():
     ]
 
     model.compile(optimizer='adam', loss='mse')
+
+    # fit
     history = model.fit(X_tr, Y_tr, epochs=n_epochs, batch_size=batch_size,
                         validation_data=(X_val, Y_val), verbose=1,
                         shuffle=False,
@@ -239,7 +282,6 @@ def get_available_gpus():
 
 if __name__ == '__main__':
     multiprocessing.set_start_method('forkserver')
-
     import pandas as pd
     #from tpot import TPOTRegressor
     from sklearn.metrics import mean_squared_error, make_scorer
@@ -255,8 +297,10 @@ if __name__ == '__main__':
     from sklearn.ensemble import ExtraTreesRegressor
     from sklearn.tree import ExtraTreeRegressor
     from catboost import CatBoostRegressor
+    from keras.wrappers.scikit_learn import KerasRegressor
+    from keras.callbacks import EarlyStopping, LearningRateScheduler
 
-    from kirgsn.data import DataManager
+    from kirgsn.data import DataManager, ReSamplerForBatchTraining
 
     # os.system("taskset -p 0xffff %d" % os.getpid())  # reset core affinity
 
@@ -268,47 +312,78 @@ if __name__ == '__main__':
         DEBUG = cfg.debug_cfg['DEBUG']
     n_debug = cfg.debug_cfg['n_debug']
     batch_size = cfg.keras_cfg['batch_size']
+    n_epochs = cfg.keras_cfg['n_epochs']
 
-    model_pool = {'': ''}
+    model_pool = {'': ''}  # baustelle
 
     dm = DataManager(join('input', 'measures.csv'))
 
     # featurize dataset (feature engineering)
     tra_df, val_df, tst_df = dm.get_featurized_sets()
 
-    # build pipeline
-    pipe = make_pipeline(PolynomialFeatures(degree=3,
-                                            include_bias=False,
-                                            interaction_only=True),
-                         Ridge()
-                         )
-    """
-    param_range = np.linspace(1, 10, num=10)
-    tscv = TimeSeriesSplit(n_splits=3)
-    tra_scores, tst_scores = validation_curve(pipe,
-                                              tra_df[dm.cl.x_cols],
-                                              tra_df[dm.cl.y_cols],
-                                              param_name='extratreesregressor__max_depth',
-                                              param_range=param_range,
-                                              cv=tscv,
-                                              scoring=
-                                              make_scorer(mean_squared_error),
-                                              verbose=5, n_jobs=2
-                                              )
-    plot_val_curves(tra_scores, tst_scores, param_range)
-    """
-    yhat = []
-    for t in dm.cl.y_cols:
-        pipe.fit(tra_df[dm.cl.x_cols], tra_df[t])
-        yhat.append(pipe.predict(tst_df[dm.cl.x_cols]).reshape((-1, 1)))
-    yhat = np.hstack(yhat)
-
-    # keras
     if cfg.keras_cfg['do_train']:
-        yhat, hist, tst_idx = train_keras()
-        # untransform actual
-        yhat = pd.DataFrame(yhat, columns=y_cols, index=tst_idx).sort_index()
-        yhat = yhat.values
+
+        class CustomKerasRegressor(KerasRegressor):
+            def reset_states(self):
+                self.model.reset_states()
+
+        # todo: How to adaptively decrease lr?
+        callbacks = [
+            EarlyStopping(monitor='val_loss',
+                          patience=cfg.train_cfg['early_stop_patience'],
+                          verbose=0),
+        ]
+
+        KerasRegressor_config = {'x_shape': (batch_size, 1, len(dm.cl.x_cols)),
+                                 'epochs': n_epochs,
+                                 'batch_size': batch_size,
+                                 'validation_data': (val_df[dm.cl.x_cols],
+                                                     val_df[dm.cl.y_cols]),
+                                 'verbose': 1,
+                                 'shuffle': False,
+                                 'callbacks': callbacks,
+                                 }
+
+        nn_estimator = CustomKerasRegressor(build_fn=build_keras_model,
+                                            **KerasRegressor_config)
+        pipe = make_pipeline(ReSamplerForBatchTraining(batch_size),
+                             nn_estimator
+                             )
+        # fit
+        history = pipe.fit(tra_df[dm.cl.x_cols], tra_df[dm.cl.y_cols])
+        # todo: Does this work out?
+        model = pipe.named_steps['customkerasregressor']
+        model.reset_states()
+
+        yhat = model.predict(tst_df[dm.cl.x_cols], batch_size=batch_size)
+
+    else:
+        # build pipeline
+        pipe = make_pipeline(PolynomialFeatures(degree=2,
+                                                include_bias=False,
+                                                interaction_only=True),
+                             Ridge()
+                             )
+        """ validation curves
+        param_range = np.linspace(1, 10, num=10)
+        tscv = TimeSeriesSplit(n_splits=3)
+        tra_scores, tst_scores = validation_curve(pipe,
+                                                  tra_df[dm.cl.x_cols],
+                                                  tra_df[dm.cl.y_cols],
+                                                  param_name='extratreesregressor__max_depth',
+                                                  param_range=param_range,
+                                                  cv=tscv,
+                                                  scoring=
+                                                  make_scorer(mean_squared_error),
+                                                  verbose=5, n_jobs=2
+                                                  )
+        plot_val_curves(tra_scores, tst_scores, param_range)
+        """
+        yhat = []
+        for t in dm.cl.y_cols:
+            pipe.fit(tra_df[dm.cl.x_cols], tra_df[t])
+            yhat.append(pipe.predict(tst_df[dm.cl.x_cols]).reshape((-1, 1)))
+        yhat = np.hstack(yhat)
 
     actual = dm.actual
     inversed_pred = dm.inverse_prediction(yhat)
