@@ -327,6 +327,17 @@ if __name__ == '__main__':
             def reset_states(self):
                 self.model.reset_states()
 
+        def reshape_input_for_batch_train(x_set):
+            assert isinstance(x_set, pd.DataFrame)
+            x = x_set.as_matrix()
+            return np.reshape(x, (x.shape[0], 1, x.shape[1]))
+
+        # reorder samples
+        resampler = ReSamplerForBatchTraining(batch_size)
+        tra_df = resampler.fit_transform(tra_df)  # there is nothing fitted
+        val_df = resampler.transform(val_df)
+        tst_df = resampler.transform(tst_df)
+
         # todo: How to adaptively decrease lr?
         callbacks = [
             EarlyStopping(monitor='val_loss',
@@ -337,8 +348,10 @@ if __name__ == '__main__':
         KerasRegressor_config = {'x_shape': (batch_size, 1, len(dm.cl.x_cols)),
                                  'epochs': n_epochs,
                                  'batch_size': batch_size,
-                                 'validation_data': (val_df[dm.cl.x_cols],
-                                                     val_df[dm.cl.y_cols]),
+                                 'validation_data': (
+                                     reshape_input_for_batch_train(
+                                         val_df[dm.cl.x_cols]),
+                                     val_df[dm.cl.y_cols]),
                                  'verbose': 1,
                                  'shuffle': False,
                                  'callbacks': callbacks,
@@ -346,16 +359,18 @@ if __name__ == '__main__':
 
         nn_estimator = CustomKerasRegressor(build_fn=build_keras_model,
                                             **KerasRegressor_config)
-        pipe = make_pipeline(ReSamplerForBatchTraining(batch_size),
-                             nn_estimator
-                             )
-        # fit
-        history = pipe.fit(tra_df[dm.cl.x_cols], tra_df[dm.cl.y_cols])
-        # todo: Does this work out?
-        model = pipe.named_steps['customkerasregressor']
-        model.reset_states()
 
-        yhat = model.predict(tst_df[dm.cl.x_cols], batch_size=batch_size)
+        # fit
+        history = nn_estimator.fit(
+            reshape_input_for_batch_train(tra_df[dm.cl.x_cols]),
+            tra_df[dm.cl.y_cols])
+        # todo: Does this work out?
+        nn_estimator.reset_states()
+
+        # predict
+        yhat = nn_estimator.predict(
+            reshape_input_for_batch_train(tst_df[dm.cl.x_cols]),
+            batch_size=batch_size)
 
     else:
         # build pipeline
