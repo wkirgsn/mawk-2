@@ -30,7 +30,8 @@ def measure_time(func):
 
 
 def _prll_create_dataset(idx, obs, data, x_cols, y_cols):
-    """internally used by function create_dataset for parallelization"""
+    """deprecated.
+    internally used by function create_dataset for parallelization"""
     return data.loc[idx:(idx + obs), x_cols].as_matrix(), \
            data.loc[idx + obs, y_cols].as_matrix()
 
@@ -39,13 +40,12 @@ def build_keras_model(x_shape=(100, 1, 10)):
     from keras.models import Sequential
     from keras.layers import LSTM, GRU, CuDNNLSTM, CuDNNGRU, SimpleRNN
     from keras.layers.core import Dense, Dropout, Flatten
-    from keras.optimizers import SGD
+    from keras.optimizers import Adam
     from keras import regularizers
     from keras import __version__ as keras_version
 
     print('Keras version: {}'.format(keras_version))
     n_neurons = cfg.keras_cfg['n_neurons']
-    n_epochs = cfg.keras_cfg['n_epochs']
     arch_dict = {'lstm': LSTM, 'gru': GRU, 'rnn': SimpleRNN}
     arch_dict_cudnn = {'lstm': CuDNNLSTM, 'gru': CuDNNGRU, 'rnn': SimpleRNN}
     if gpu_available:
@@ -70,11 +70,13 @@ def build_keras_model(x_shape=(100, 1, 10)):
     model.add(Dropout(0.5))
     model.add(Dense(4))
 
-    model.compile(optimizer='adam', loss='mse')
+    opt = Adam(lr=10**-5, decay=.01)
+    model.compile(optimizer=opt, loss='mse')
     return model
 
 
 def train_keras():
+    """deprecated"""
     from keras.models import Sequential
     from keras.layers import LSTM, GRU, CuDNNLSTM, CuDNNGRU, SimpleRNN
     from keras.layers.core import Dense, Dropout, Flatten
