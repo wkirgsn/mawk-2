@@ -317,9 +317,8 @@ class ReSamplerForBatchTraining(BaseEstimator, TransformerMixin):
         return X
 
     def inverse_transform(self, X):
-        """TODO: Not correctly implemented"""
-        inversed = pd.DataFrame(X, columns=self.columns, index=self.indices)\
-            .sort_index()
+        # columns undefined
+        inversed = pd.DataFrame(X, index=self.indices).sort_index()
         return inversed
 
 

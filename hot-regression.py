@@ -40,7 +40,7 @@ def build_keras_model(x_shape=(100, 1, 10)):
     from keras.models import Sequential
     from keras.layers import LSTM, GRU, CuDNNLSTM, CuDNNGRU, SimpleRNN
     from keras.layers.core import Dense, Dropout, Flatten
-    from keras.optimizers import Adam
+    from keras.optimizers import Adam, Nadam
     from keras import regularizers
     from keras import __version__ as keras_version
 
@@ -66,11 +66,9 @@ def build_keras_model(x_shape=(100, 1, 10)):
             stateful=True,
             ))
     model.add(Dropout(0.5))
-    model.add(Dense(16))
-    model.add(Dropout(0.5))
     model.add(Dense(4))
 
-    opt = Adam(lr=10**-5, decay=.01)
+    opt = Nadam()
     model.compile(optimizer=opt, loss='mse')
     return model
 
@@ -366,13 +364,15 @@ if __name__ == '__main__':
         history = nn_estimator.fit(
             reshape_input_for_batch_train(tra_df[dm.cl.x_cols]),
             tra_df[dm.cl.y_cols])
-        # todo: Does this work out?
         nn_estimator.reset_states()
 
         # predict
         yhat = nn_estimator.predict(
             reshape_input_for_batch_train(tst_df[dm.cl.x_cols]),
             batch_size=batch_size)
+
+        # correct the order again
+        yhat = resampler.inverse_transform(yhat)
 
     else:
         # build pipeline
