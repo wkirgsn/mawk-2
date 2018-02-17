@@ -277,6 +277,8 @@ if __name__ == '__main__':
             if with_val_set:
                 train_d['eval_set'] = (val_df[dm.cl.x_cols],
                                        val_df[dm.cl.y_cols])
+                train_d['early_stopping_rounds'] = 30
+                
             if is_mimo:
                 print('start training...')
                 _model.fit(**train_d)
