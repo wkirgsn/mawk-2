@@ -1,6 +1,6 @@
 
 debug_cfg = {'DEBUG': False,
-             'choose_debug_on_gpu_availability': True,
+             'choose_debug_on_gpu_availability': False,
              'n_debug': 100,  # first n timestamps to use if debug
              }
 
@@ -26,12 +26,13 @@ data_cfg = {
                  '20', '27',
                  '29', '30',
                  '31', '32', '36'],
-    }
-
-path_cfg = {
+    # paths
     'file_path': "/home/wilhelmk/Messdaten/PMSM_Lastprofile/hdf"
                  "/all_load_profiles",
-}
+    'db_path': 'results.db',
+    'save_predictions': True,
+    }
+
 
 plot_cfg = {'do_plot': True, }
 

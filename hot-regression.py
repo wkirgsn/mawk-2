@@ -4,6 +4,8 @@ import multiprocessing
 import time
 import os
 from os.path import join
+import sqlite3
+import uuid
 
 import numpy as np
 from tensorflow.python.client import device_lib
@@ -16,17 +18,6 @@ np.random.seed(2017)
 # todo: xgb, lgbm attempts
 # todo: save train trend history for visualizing
 # todo: apply bayesian opt for hyperparams
-
-
-def measure_time(func):
-    """time measuring decorator"""
-    def wrapped(*args, **kwargs):
-        start_time = time.time()
-        ret = func(*args, **kwargs)
-        end_time = time.time()
-        print('took {} seconds'.format(end_time-start_time))
-        return ret
-    return wrapped
 
 
 def _prll_create_dataset(idx, obs, data, x_cols, y_cols):
@@ -71,121 +62,6 @@ def build_keras_model(x_shape=(100, 1, 10)):
     opt = Nadam()
     model.compile(optimizer=opt, loss='mse')
     return model
-
-
-def train_keras():
-    """deprecated"""
-    from keras.models import Sequential
-    from keras.layers import LSTM, GRU, CuDNNLSTM, CuDNNGRU, SimpleRNN
-    from keras.layers.core import Dense, Dropout, Flatten
-    from keras.optimizers import SGD
-    from keras import regularizers
-    from keras.callbacks import EarlyStopping, LearningRateScheduler
-    from keras import __version__ as keras_version
-
-    print('Keras version: {}'.format(keras_version))
-    n_neurons = cfg.keras_cfg['n_neurons']
-    n_epochs = cfg.keras_cfg['n_epochs']
-    arch_dict = {'lstm': LSTM, 'gru': GRU, 'rnn': SimpleRNN}
-    arch_dict_cudnn = {'lstm': CuDNNLSTM, 'gru': CuDNNGRU, 'rnn': SimpleRNN}
-    if gpu_available:
-        ANN = arch_dict_cudnn[cfg.keras_cfg['arch']]
-    else:
-        ANN = arch_dict[cfg.keras_cfg['arch']]
-
-    @measure_time
-    def create_dataset(dataset, fit_to_batch=True):
-        df_X = dataset.loc[:, x_cols]
-        df_Y = dataset.loc[:, y_cols]
-
-        if fit_to_batch:
-            if cfg.keras_cfg['add_shifts']:
-                # add shifts to dataset samples
-                shifted_list_of_df_X = \
-                    [df_X.shift(i+1) for i in range(batch_size-1)]
-                df_X = pd.concat([df_X, ] + shifted_list_of_df_X, axis=0)
-                df_X.dropna(inplace=True)
-                df_X.reset_index(drop=True, inplace=True)
-
-                shifted_list_of_df_Y = \
-                    [df_Y.shift(i+1) for i in range(batch_size-1)]
-                df_Y = pd.concat([df_Y, ] + shifted_list_of_df_Y, axis=0)
-                df_Y.dropna(inplace=True)
-                df_Y.reset_index(drop=True, inplace=True)
-
-            # cut the tail
-            trunc_idx = len(df_X) % batch_size
-            df_X = df_X.iloc[:-trunc_idx, :]
-            df_Y = df_Y.iloc[:-trunc_idx, :]
-
-            # reorder for batch training
-            new_idx = np.tile(np.arange(batch_size), len(df_X) // batch_size)
-            assert len(df_X)==new_idx.shape[0],\
-                "{} != {}".format(len(df_X), new_idx.shape[0])
-            df_X['new_idx'] = new_idx
-            df_X.sort_values(by='new_idx', ascending=True, inplace=True)
-            df_Y['new_idx'] = new_idx
-            df_Y.sort_values(by='new_idx', ascending=True, inplace=True)
-
-            original_indices = [list(df_X.index), list(df_Y.index)]
-
-            df_X.reset_index(drop=True, inplace=True)
-            df_Y.reset_index(drop=True, inplace=True)
-            df_X.drop(['new_idx'], axis=1, inplace=True)
-            df_Y.drop(['new_idx'], axis=1, inplace=True)
-
-        x_mat = df_X.as_matrix()
-        y_mat = df_Y.as_matrix()
-        del df_X, df_Y
-
-        x_mat = np.reshape(x_mat, (x_mat.shape[0], 1, x_mat.shape[1]))
-        return x_mat, y_mat, original_indices
-
-    print("build dataset..")
-    print('trainset..')
-    X_tr, Y_tr, idx_tr = create_dataset(tra_df)
-    print('valset..')
-    X_val, Y_val, idx_val = create_dataset(val_df)
-    print('testset..')
-    X_tst, Y_tst, idx_tst = create_dataset(tst_df)
-
-    print('Shapes: train {}, val {}, test {}'.format(X_tr.shape,
-                                                     X_val.shape,
-                                                     X_tst.shape))
-
-    # create model
-    model = Sequential()
-    model.add(
-        ANN(n_neurons,
-            # implementation=2,  # only known by non-CUDNN classes
-            batch_input_shape=(batch_size, X_tr.shape[1], X_tr.shape[2]),
-            kernel_regularizer=regularizers.l2(cfg.train_cfg['l2_reg_w']),
-            activity_regularizer=regularizers.l2(cfg.train_cfg['l2_reg_w']),
-            recurrent_regularizer=regularizers.l2(cfg.train_cfg['l2_reg_w']),
-            stateful=True,
-            ))
-    model.add(Dropout(0.5))
-    model.add(Dense(16))
-    model.add(Dropout(0.5))
-    model.add(Dense(4))
-
-    callbacks = [
-        EarlyStopping(monitor='val_loss',
-                      patience=cfg.train_cfg['early_stop_patience'],
-                      verbose=0),
-    ]
-
-    model.compile(optimizer='adam', loss='mse')
-
-    # fit
-    history = model.fit(X_tr, Y_tr, epochs=n_epochs, batch_size=batch_size,
-                        validation_data=(X_val, Y_val), verbose=1,
-                        shuffle=False,
-                        callbacks=callbacks)
-    model.reset_states()
-
-    return model.predict(X_tst, batch_size=batch_size),\
-           history.history, idx_tst
 
 
 def tpotting():
@@ -297,6 +173,7 @@ if __name__ == '__main__':
     from sklearn.ensemble import ExtraTreesRegressor
     from sklearn.tree import ExtraTreeRegressor
     from catboost import CatBoostRegressor
+    import lightgbm
     from keras.wrappers.scikit_learn import KerasRegressor
     from keras.callbacks import EarlyStopping, LearningRateScheduler
 
@@ -310,6 +187,8 @@ if __name__ == '__main__':
         DEBUG = not gpu_available
     else:
         DEBUG = cfg.debug_cfg['DEBUG']
+    if DEBUG:
+        print('## DEBUG MODE ON ##')
     n_debug = cfg.debug_cfg['n_debug']
     batch_size = cfg.keras_cfg['batch_size']
     n_epochs = cfg.keras_cfg['n_epochs']
@@ -376,11 +255,7 @@ if __name__ == '__main__':
 
     else:
         # build pipeline
-        pipe = make_pipeline(PolynomialFeatures(degree=2,
-                                                include_bias=False,
-                                                interaction_only=True),
-                             Ridge()
-                             )
+        model = lightgbm.LGBMRegressor()
         """ validation curves
         param_range = np.linspace(1, 10, num=10)
         tscv = TimeSeriesSplit(n_splits=3)
@@ -396,11 +271,22 @@ if __name__ == '__main__':
                                                   )
         plot_val_curves(tra_scores, tst_scores, param_range)
         """
-        yhat = []
-        for t in dm.cl.y_cols:
-            pipe.fit(tra_df[dm.cl.x_cols], tra_df[t])
-            yhat.append(pipe.predict(tst_df[dm.cl.x_cols]).reshape((-1, 1)))
-        yhat = np.hstack(yhat)
+        def _train(_model, is_mimo=True):
+            if is_mimo:
+                print('start training...')
+                _model.fit(tra_df[dm.cl.x_cols], tra_df[dm.cl.y_cols])
+                ret = _model.predict(tst_df[dm.cl.x_cols])
+            else:
+                ret = []
+                for t in dm.cl.y_cols:
+                    print('start training against {}'.format(t))
+                    _model.fit(tra_df[dm.cl.x_cols], tra_df[t])
+                    ret.append(
+                        _model.predict(tst_df[dm.cl.x_cols]).reshape((-1, 1)))
+                ret = np.hstack(ret)
+            return ret
+
+        yhat = _train(model, is_mimo=False)
 
     actual = dm.actual
     inversed_pred = dm.inverse_prediction(yhat)
@@ -412,12 +298,28 @@ if __name__ == '__main__':
         actual = actual.iloc[offset:, :]
     print('mse: {:.6} K²'.format(mean_squared_error(actual.values,
                                                     inversed_pred.values)))
+    # save predictions
+    if cfg.data_cfg['save_predictions']:
+        with sqlite3.connect(cfg.data_cfg['db_path']) as con:
+            # create table if not exists
+            query = """CREATE TABLE IF NOT EXISTS 
+                predictions(id text, idx int, {} real, {} real, {} real, 
+                {} real)""".format(*inversed_pred.columns)
+            con.execute(query)
 
+            # format prediction
+            df_to_db = inversed_pred.copy()
+            df_to_db['id'] = str(uuid.uuid4())[:6]
+            df_to_db['idx'] = inversed_pred.index
+            entries = [tuple(x) for x in np.roll(df_to_db.values,
+                                                 shift=2, axis=1)]
+            con.executemany('INSERT INTO predictions VALUES (?, ?, ?, ?, ?, ?)',
+                            entries)
     # plots
     if cfg.plot_cfg['do_plot']:
         if cfg.keras_cfg['do_train']:
             plt.subplot(211)
-            plt.plot(hist['loss'])
-            plt.plot(hist['val_loss'])
+            plt.plot(history['loss'])
+            plt.plot(history['val_loss'])
             plt.subplot(212)
         plot_results(actual, inversed_pred)

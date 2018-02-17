@@ -19,7 +19,7 @@ def measure_time(func):
         start_time = time.time()
         ret = func(*args, **kwargs)
         end_time = time.time()
-        print('took {} seconds'.format(end_time-start_time))
+        print('took {:.3} seconds'.format(end_time-start_time))
         return ret
     return wrapped
 
@@ -95,9 +95,9 @@ class DataManager:
                                             None, None, self.cl.x_cols)),
                                        ('lag_feats_x',
                                         LagFeatures(self.cl.x_cols)),
-                                       #('rolling_feats_x',
-                                        #RollingFeatures(self.cl.x_cols,
-                                         #               lookback=10))
+                                       ('rolling_feats_x',
+                                        RollingFeatures(self.cl.x_cols,
+                                                        lookback=10))
                                        ])
 
         featurize_pipe = FeatureUnionReframer.make_df_retaining(featurize_union)
@@ -115,13 +115,14 @@ class DataManager:
             ('cleaning', DFCleaner()),
             ('scaler', scaling_pipe),
             ('poly', Polynomials(degree=2)),
-            ('ident', IdentityEstimator())
+            ('ident', None)
+            #('ident', IdentityEstimator())
         ])
 
     @property
     def tra_df(self):
         sub_df = self.df[~self.df[self.PROFILE_ID_COL].isin(
-            cfg.data_cfg['testset']# + cfg.data_cfg['valset']
+            cfg.data_cfg['testset'] + cfg.data_cfg['valset']
         )]
         sub_df.reset_index(drop=True, inplace=True)
         self.cl.update(sub_df)
@@ -183,8 +184,8 @@ class DataManager:
     def plot(self):
         from pandas.plotting import autocorrelation_plot
         import matplotlib.pyplot as plt
-        self.df[[c for c in self.x_cols if 'rolling' in c] +
-                self.y_cols].plot(subplots=True, sharex=True)
+        self.df[[c for c in self.x_cols if 'rolling' in c] + self.y_cols]\
+            .plot(subplots=True, sharex=True)
         plt.show()
 
 
