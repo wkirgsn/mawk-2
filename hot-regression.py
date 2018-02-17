@@ -192,7 +192,9 @@ if __name__ == '__main__':
     n_debug = cfg.debug_cfg['n_debug']
     batch_size = cfg.keras_cfg['batch_size']
     n_epochs = cfg.keras_cfg['n_epochs']
-
+    if cfg.data_cfg['save_predictions']:
+        model_uuid = str(uuid.uuid4())[:6]
+        print('model uuid: {}'.format(model_uuid))
     model_pool = {'': ''}  # baustelle
 
     dm = DataManager(join('input', 'measures.csv'))
@@ -319,7 +321,7 @@ if __name__ == '__main__':
 
             # format prediction
             df_to_db = inversed_pred.copy()
-            df_to_db['id'] = str(uuid.uuid4())[:6]
+            df_to_db['id'] = model_uuid
             df_to_db['idx'] = inversed_pred.index
             entries = [tuple(x) for x in np.roll(df_to_db.values,
                                                  shift=2, axis=1)]
