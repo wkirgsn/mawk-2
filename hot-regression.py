@@ -271,16 +271,24 @@ if __name__ == '__main__':
                                                   )
         plot_val_curves(tra_scores, tst_scores, param_range)
         """
-        def _train(_model, is_mimo=True):
+        def _train(_model, is_mimo=True, with_val_set=True):
+            train_d = {'X': tra_df[dm.cl.x_cols],
+                       'y': tra_df[dm.cl.y_cols]}
+            if with_val_set:
+                train_d['eval_set'] = (val_df[dm.cl.x_cols],
+                                       val_df[dm.cl.y_cols])
             if is_mimo:
                 print('start training...')
-                _model.fit(tra_df[dm.cl.x_cols], tra_df[dm.cl.y_cols])
+                _model.fit(**train_d)
                 ret = _model.predict(tst_df[dm.cl.x_cols])
             else:
                 ret = []
                 for t in dm.cl.y_cols:
                     print('start training against {}'.format(t))
-                    _model.fit(tra_df[dm.cl.x_cols], tra_df[t])
+                    train_d['y'] = tra_df[t]
+                    if with_val_set:
+                        train_d['eval_set'] = (val_df[dm.cl.x_cols], val_df[t])
+                    _model.fit(**train_d)
                     ret.append(
                         _model.predict(tst_df[dm.cl.x_cols]).reshape((-1, 1)))
                 ret = np.hstack(ret)
