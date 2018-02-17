@@ -255,7 +255,7 @@ if __name__ == '__main__':
 
     else:
         # build pipeline
-        model = lightgbm.LGBMRegressor()
+        model = lightgbm.LGBMRegressor(n_estimators=1000)
         """ validation curves
         param_range = np.linspace(1, 10, num=10)
         tscv = TimeSeriesSplit(n_splits=3)
@@ -278,7 +278,7 @@ if __name__ == '__main__':
                 train_d['eval_set'] = (val_df[dm.cl.x_cols],
                                        val_df[dm.cl.y_cols])
                 train_d['early_stopping_rounds'] = 30
-                
+
             if is_mimo:
                 print('start training...')
                 _model.fit(**train_d)
