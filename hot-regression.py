@@ -327,6 +327,8 @@ if __name__ == '__main__':
                                                  shift=2, axis=1)]
             con.executemany('INSERT INTO predictions VALUES (?, ?, ?, ?, ?, ?)',
                             entries)
+            print('Predictions of model with uuid {} saved to db.'.format(
+                model_uuid))
     # plots
     if cfg.plot_cfg['do_plot']:
         if cfg.keras_cfg['do_train']:

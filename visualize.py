@@ -4,6 +4,7 @@ import numpy as np
 from os.path import join
 from sklearn.metrics import mean_squared_error
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 import config as cfg
 from kirgsn.data import DataManager
@@ -12,8 +13,15 @@ ID_TO_READ = 'b9f735'
 
 
 def plot_results(y, yhat):
+    plt.subplot(211)
     plt.plot(y, alpha=0.6, color='darkorange')
     plt.plot(yhat, lw=2, color='navy')
+    plt.xlabel('time in s')
+    plt.ylabel('temperature in K')
+    plt.subplot(212)
+    plt.plot(yhat-y, color='red')
+    plt.xlabel('time in s')
+    plt.ylabel('temperature in K')
     plt.show()
 
 
