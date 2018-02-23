@@ -276,9 +276,9 @@ if __name__ == '__main__':
         model = lightgbm.LGBMRegressor(n_estimators=10000)
         hyper_params = {'num_leaves': list(range(2, 4096, 2)),
                         'max_depth': list(range(2, 64)),
-                        #'scale_pos_weight': list(range(1, 10000)),
+                        'scale_pos_weight': list(range(1, 10000)),
                         'colsample_bytree': list(np.linspace(0.3, 1.0)),
-                        'min_child_weight': list(np.linspace(0.01, 1000, 100))
+                        #'min_child_weight': list(np.linspace(0.01, 1000, 100))
                         }
         tscv = TimeSeriesSplit()
 
