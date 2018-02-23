@@ -167,7 +167,8 @@ if __name__ == '__main__':
     from sklearn.linear_model import Ridge, Lasso, LassoLarsCV, ElasticNet
     from sklearn.pipeline import make_pipeline, Pipeline
     from sklearn.preprocessing import PolynomialFeatures, StandardScaler, MinMaxScaler
-    from sklearn.model_selection import validation_curve, TimeSeriesSplit
+    from sklearn.model_selection import validation_curve, TimeSeriesSplit, \
+        RandomizedSearchCV
     from sklearn.feature_selection import SelectFromModel, SelectPercentile, \
         f_regression
     from sklearn.ensemble import ExtraTreesRegressor
@@ -257,7 +258,6 @@ if __name__ == '__main__':
 
     else:
         # build pipeline
-        model = lightgbm.LGBMRegressor(n_estimators=1000)
         """ validation curves
         param_range = np.linspace(1, 10, num=10)
         tscv = TimeSeriesSplit(n_splits=3)
@@ -273,7 +273,30 @@ if __name__ == '__main__':
                                                   )
         plot_val_curves(tra_scores, tst_scores, param_range)
         """
+        model = lightgbm.LGBMRegressor(n_estimators=10000)
+        hyper_params = {'num_leaves': list(range(2, 4096, 2)),
+                        'max_depth': list(range(2, 64)),
+                        'scale_pos_weight': list(range(1, 10000)),
+                        'colsample_bytree': list(np.linspace(0.3, 1.0)),
+                        'min_child_weight': list(np.linspace())
+                        }
+        tscv = TimeSeriesSplit()
+
+        # hyper param tuning
+        rnd_search = \
+            RandomizedSearchCV(model,
+                               param_distributions=hyper_params,
+                               iid=False, cv=tscv, )
+        rnd_search.fit(tra_df[dm.cl.x_cols], tra_df[dm.cl.y_cols[0]])
+        print('cv results: {}'.format(rnd_search.cv_results_))
+        print('best params: {}'.format(rnd_search.best_params_))
+        print('best score: {}'.format(rnd_search.best_score_))
+
+        model = lightgbm.LGBMRegressor(n_estimators=1000,
+                                       **rnd_search.best_params_)
+
         def _train(_model, is_mimo=True, with_val_set=True):
+
             train_d = {'X': tra_df[dm.cl.x_cols],
                        'y': tra_df[dm.cl.y_cols]}
             if with_val_set:
@@ -281,21 +304,27 @@ if __name__ == '__main__':
                                        val_df[dm.cl.y_cols])
                 train_d['early_stopping_rounds'] = 30
 
-            if is_mimo:
-                print('start training...')
-                _model.fit(**train_d)
-                ret = _model.predict(tst_df[dm.cl.x_cols])
-            else:
-                ret = []
-                for t in dm.cl.y_cols:
-                    print('start training against {}'.format(t))
-                    train_d['y'] = tra_df[t]
-                    if with_val_set:
-                        train_d['eval_set'] = (val_df[dm.cl.x_cols], val_df[t])
+            # one shot with default params
+            for tra_idcs, val_idcs in tscv.split(tra_df):
+                train_d['X'] = tra_df.loc[tra_idcs, dm.cl.x_cols]
+                train_d['y'] = tra_df.loc[tra_idcs, dm.cl.y_cols]
+                train_d['eval_set'] = (val_df.loc[val_idcs, dm.cl.x_cols],
+                                       val_df.loc[val_idcs, dm.cl.y_cols])
+                if is_mimo:
+                    print('start training...')
                     _model.fit(**train_d)
-                    ret.append(
-                        _model.predict(tst_df[dm.cl.x_cols]).reshape((-1, 1)))
-                ret = np.hstack(ret)
+                    ret = _model.predict(tst_df[dm.cl.x_cols])
+                else:
+                    ret = []
+                    for t in dm.cl.y_cols:
+                        print('start training against {}'.format(t))
+                        train_d['y'] = tra_df[t]
+                        if with_val_set:
+                            train_d['eval_set'] = (val_df[dm.cl.x_cols], val_df[t])
+                        _model.fit(**train_d)
+                        ret.append(
+                            _model.predict(tst_df[dm.cl.x_cols]).reshape((-1, 1)))
+                    ret = np.hstack(ret)
             return ret
 
         yhat = _train(model, is_mimo=False)
