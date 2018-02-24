@@ -68,9 +68,12 @@ class DataManager:
 
     PROFILE_ID_COL = 'profile_id'
 
-    def __init__(self, path):
+    def __init__(self, path, create_hold_out=True):
         # original data
         self.dataset = pd.read_csv(path, dtype=np.float32)
+        # When using CV, do not create a hold out
+        self.has_hold_out = create_hold_out
+
         # downsample
         #self.dataset = self.dataset.iloc[::2, :]
         # drop profiles
@@ -85,7 +88,6 @@ class DataManager:
         self.cl.x_cols = cfg.data_cfg['Input_param_names']
 
         # build pipeline building blocks
-
         featurize_union = FeatureUnion([('simple_trans_y',
                                         SimpleTransformer(np.sqrt,
                                                           np.square,
@@ -97,7 +99,7 @@ class DataManager:
                                         LagFeatures(self.cl.x_cols)),
                                        ('rolling_feats_x',
                                         RollingFeatures(self.cl.x_cols,
-                                                        lookback=10))
+                                                        lookback=100))
                                        ])
 
         featurize_pipe = FeatureUnionReframer.make_df_retaining(featurize_union)
@@ -116,21 +118,24 @@ class DataManager:
             ('scaler', scaling_pipe),
             ('poly', Polynomials(degree=2)),
             ('ident', None)
-            #('ident', IdentityEstimator())
         ])
 
     @property
     def tra_df(self):
-        sub_df = self.df[~self.df[self.PROFILE_ID_COL].isin(
-            cfg.data_cfg['testset'] #+ cfg.data_cfg['valset']
-        )]
+        testsets = cfg.data_cfg['testset']
+        valsets = cfg.data_cfg['valset']
+        profiles_to_exclude = \
+            testsets + valsets if self.has_hold_out else testsets
+        sub_df = \
+            self.df[~self.df[self.PROFILE_ID_COL].isin(profiles_to_exclude)]
         sub_df.reset_index(drop=True, inplace=True)
         self.cl.update(sub_df)
         return sub_df
 
     @property
     def val_df(self):
-        sub_df = self.df[self.df[self.PROFILE_ID_COL].isin(cfg.data_cfg['valset'])]
+        sub_df = \
+            self.df[self.df[self.PROFILE_ID_COL].isin(cfg.data_cfg['valset'])]
         sub_df.reset_index(drop=True, inplace=True)
         return sub_df
 
