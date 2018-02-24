@@ -316,8 +316,8 @@ if __name__ == '__main__':
             for tra_idcs, val_idcs in tscv.split(tra_df):
                 train_d['X'] = tra_df.loc[tra_idcs, dm.cl.x_cols]
                 train_d['y'] = tra_df.loc[tra_idcs, dm.cl.y_cols]
-                train_d['eval_set'] = (val_df.loc[val_idcs, dm.cl.x_cols],
-                                       val_df.loc[val_idcs, dm.cl.y_cols])
+                train_d['eval_set'] = (tra_df.loc[val_idcs, dm.cl.x_cols],
+                                       tra_df.loc[val_idcs, dm.cl.y_cols])
                 if is_mimo:
                     print('start training...')
                     fold_ret = []

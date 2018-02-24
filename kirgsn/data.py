@@ -122,7 +122,7 @@ class DataManager:
     @property
     def tra_df(self):
         sub_df = self.df[~self.df[self.PROFILE_ID_COL].isin(
-            cfg.data_cfg['testset'] + cfg.data_cfg['valset']
+            cfg.data_cfg['testset'] #+ cfg.data_cfg['valset']
         )]
         sub_df.reset_index(drop=True, inplace=True)
         self.cl.update(sub_df)
