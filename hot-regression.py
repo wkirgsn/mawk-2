@@ -196,7 +196,6 @@ if __name__ == '__main__':
     if cfg.data_cfg['save_predictions']:
         model_uuid = str(uuid.uuid4())[:6]
         print('model uuid: {}'.format(model_uuid))
-    model_pool = {'': ''}  # baustelle
 
     dm = DataManager(join('input', 'measures.csv'))
 
@@ -273,7 +272,15 @@ if __name__ == '__main__':
                                                   )
         plot_val_curves(tra_scores, tst_scores, param_range)
         """
-        model = lightgbm.LGBMRegressor(n_estimators=10000)
+        best_params = {'n_estimators': 1000,
+                       'colsample_bytree': 0.48571428571428571,
+                       'num_leaves': 20,
+                       'scale_pos_weight': 7107,
+                       'max_depth': 53,
+                       'min_child_weight': 131.32181818181817,
+                       }
+        model = lightgbm.LGBMRegressor(**best_params)
+        """
         hyper_params = {'num_leaves': list(range(2, 32, 2)),
                         'max_depth': list(range(2, 64)),
                         'scale_pos_weight': list(range(1, 10000)),
@@ -281,7 +288,7 @@ if __name__ == '__main__':
                         'min_child_weight': list(np.linspace(0.01, 1000, 100))
                         }
         tscv = TimeSeriesSplit()
-
+        # todo: Try hyperopt
         # hyper param tuning
         rnd_search = \
             RandomizedSearchCV(model,
@@ -291,10 +298,10 @@ if __name__ == '__main__':
         print('cv results: {}'.format(rnd_search.cv_results_))
         print('best params: {}'.format(rnd_search.best_params_))
         print('best score: {}'.format(rnd_search.best_score_))
-
+       
         model = lightgbm.LGBMRegressor(n_estimators=1000,
                                        **rnd_search.best_params_)
-
+        """
         def _train(_model, is_mimo=True, with_val_set=True):
 
             train_d = {'X': tra_df[dm.cl.x_cols],
@@ -312,10 +319,12 @@ if __name__ == '__main__':
                                        val_df.loc[val_idcs, dm.cl.y_cols])
                 if is_mimo:
                     print('start training...')
+                    fold_ret = []
                     _model.fit(**train_d)
                     ret = _model.predict(tst_df[dm.cl.x_cols])
+                    fold_ret.append(ret)
                 else:
-                    ret = []
+                    fold_ret, ret = [], []
                     for t in dm.cl.y_cols:
                         print('start training against {}'.format(t))
                         train_d['y'] = tra_df[t]
@@ -325,7 +334,9 @@ if __name__ == '__main__':
                         ret.append(
                             _model.predict(tst_df[dm.cl.x_cols]).reshape((-1, 1)))
                     ret = np.hstack(ret)
-            return ret
+                    fold_ret.append(ret)
+                fold_ret = np.dstack(fold_ret).mean(axis=3)
+            return fold_ret
 
         yhat = _train(model, is_mimo=False)
 
