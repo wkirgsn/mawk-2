@@ -309,6 +309,7 @@ if __name__ == '__main__':
                        'y': tra_df[dm.cl.y_cols]}
 
             # one shot with default params
+            fold_ret = []
             for tra_idcs, val_idcs in tscv.split(tra_df):
                 train_d['X'] = tra_df.loc[tra_idcs, dm.cl.x_cols]
                 train_d['y'] = tra_df.loc[tra_idcs, dm.cl.y_cols]
@@ -322,9 +323,8 @@ if __name__ == '__main__':
                     fold_ret = []
                     _model.fit(**train_d)
                     ret = _model.predict(tst_df[dm.cl.x_cols])
-                    fold_ret.append(ret)
                 else:
-                    fold_ret, ret = [], []
+                    ret = []
                     for t in dm.cl.y_cols:
                         print('start training against {}'.format(t))
                         train_d['y'] = tra_df.loc[tra_idcs, t]
@@ -337,8 +337,8 @@ if __name__ == '__main__':
                             _model.predict(tst_df[dm.cl.x_cols])
                                 .reshape((-1, 1)))
                     ret = np.hstack(ret)
-                    fold_ret.append(ret)
-                fold_ret = np.dstack(fold_ret).mean(axis=3)
+                fold_ret.append(ret)
+            fold_ret = np.dstack(fold_ret).mean(axis=2)
             return fold_ret
 
         yhat = _train(model, is_mimo=False)
