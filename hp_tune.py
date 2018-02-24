@@ -36,7 +36,7 @@ if __name__ == '__main__':
     hyper_params = cfg.lgbm_cfg['hp_tuning']
     # todo: Try hyperopt
     rnd_search = \
-        RandomizedSearchCV(model,
+        RandomizedSearchCV(model, n_iter=100,
                            param_distributions=hyper_params,
                            iid=False, cv=tscv, )
     rnd_search.fit(tra_df[dm.cl.x_cols], tra_df[dm.cl.y_cols[0]])
