@@ -280,6 +280,8 @@ if __name__ == '__main__':
                        'min_child_weight': 131.32181818181817,
                        }
         model = lightgbm.LGBMRegressor(**best_params)
+        tscv = TimeSeriesSplit()
+
         """
         hyper_params = {'num_leaves': list(range(2, 32, 2)),
                         'max_depth': list(range(2, 64)),
@@ -287,7 +289,6 @@ if __name__ == '__main__':
                         'colsample_bytree': list(np.linspace(0.3, 1.0)),
                         'min_child_weight': list(np.linspace(0.01, 1000, 100))
                         }
-        tscv = TimeSeriesSplit()
         # todo: Try hyperopt
         # hyper param tuning
         rnd_search = \
