@@ -307,7 +307,8 @@ class ReSamplerForBatchTraining(BaseEstimator, TransformerMixin):
         assert isinstance(X, pd.DataFrame)
         # cut the tail
         trunc_idx = len(X) % self.batch_size
-        X = X.iloc[:-trunc_idx, :]
+        if trunc_idx > 0:
+            X = X.iloc[:-trunc_idx, :]
 
         # reorder
         new_idcs = np.tile(np.arange(self.batch_size), len(X) //
