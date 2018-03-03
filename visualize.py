@@ -6,10 +6,10 @@ from sklearn.metrics import mean_squared_error
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-import config as cfg
+import kirgsn.config as cfg
 from kirgsn.data import DataManager
 
-ID_TO_READ = 'b9f735'
+ID_TO_READ = '110f56'
 
 
 def plot_results(y, yhat):

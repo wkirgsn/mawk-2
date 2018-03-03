@@ -48,11 +48,12 @@ keras_cfg = {
 
 lgbm_cfg = {
     'params': {'n_estimators': 1000,
-               'colsample_bytree': 0.48,
-               'num_leaves': 20,
-               'scale_pos_weight': 7107,
-               'max_depth': 53,
-               'min_child_weight': 131.32,
+               'colsample_bytree': 0.67143,
+               'num_leaves': 180,
+               'scale_pos_weight': 6427,
+               'max_depth': 48,
+               'min_child_weight': 10.11,
+                'random_state': 2340,
                },
     'hp_tuning': {'num_leaves': list(range(2, 256, 2)),
                     'max_depth': list(range(2, 64)),

@@ -314,7 +314,7 @@ class ReSamplerForBatchTraining(BaseEstimator, TransformerMixin):
                            self.batch_size)
         assert len(X) == new_idcs.shape[0], \
             "{} != {}".format(len(X), new_idcs.shape[0])
-        X['new_idx'] = new_idcs
+        X.loc[:, 'new_idx'] = new_idcs
         X.sort_values(by='new_idx', ascending=True, inplace=True)
         self.indices = X.index
         X.reset_index(drop=True, inplace=True)
