@@ -55,10 +55,10 @@ def build_keras_model(x_shape=(100, 1, 10)):
         ANN(n_neurons,
             # implementation=2,  # only known by non-CUDNN classes
             batch_input_shape=(batch_size, x_shape[1], x_shape[2]),
-            kernel_regularizer=regularizers.l2(cfg.train_cfg['l2_reg_w']),
-            activity_regularizer=regularizers.l2(cfg.train_cfg['l2_reg_w']),
+            kernel_regularizer=regularizers.l2(cfg.keras_cfg['l2_reg_w']),
+            activity_regularizer=regularizers.l2(cfg.keras_cfg['l2_reg_w']),
             recurrent_regularizer=regularizers.l2(
-                cfg.train_cfg['l2_reg_w']),
+                cfg.keras_cfg['l2_reg_w']),
             stateful=True,
             ))
     model.add(Dropout(0.5))
@@ -97,10 +97,10 @@ if __name__ == '__main__':
     val_df = resampler.transform(val_df)
     tst_df = resampler.transform(tst_df)
 
-    # todo: How to adaptively decrease lr?
+    # todo: How to adaptively decrease lr? -> scheduler callback
     callbacks = [
         EarlyStopping(monitor='val_loss',
-                      patience=cfg.train_cfg['early_stop_patience'],
+                      patience=cfg.keras_cfg['early_stop_patience'],
                       verbose=0),
     ]
 

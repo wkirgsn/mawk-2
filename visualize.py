@@ -9,7 +9,7 @@ import seaborn as sns
 import kirgsn.config as cfg
 from kirgsn.data import DataManager
 
-ID_TO_READ = '110f56'
+ID_TO_READ = 'ef966d'
 
 
 def plot_results(y, yhat):

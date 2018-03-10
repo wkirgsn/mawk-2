@@ -27,11 +27,11 @@ def measure_time(func):
 class ColumnManager:
     """Class to keep track of the current input columns and for general
     economy of features"""
-    def __init__(self, df):
-        self.original = df.columns
+    def __init__(self, df, white_list=[]):
+        self.original = list(df.columns)
         self._x, self._y = None, cfg.data_cfg['Target_param_names']
+        self.white_list = white_list
         self.update(df)
-        self.stash = []
 
     @property
     def x_cols(self):
@@ -45,28 +45,24 @@ class ColumnManager:
     def y_cols(self):
         return self._y
 
-    def update(self, df, stash=None):
+    def update(self, df):
         x_cols = []
         for col in df.columns:
             for p in cfg.data_cfg['Input_param_names']:
                 if p in col:
                     x_cols.append(col)
-        if stash is not None:
-            assert isinstance(stash, list)
-            x_cols.extend(stash)
-            self.empty_stash()
+                    break
+            else:
+                # col hasn't matched the pattern, check whitelist
+                if col in self.white_list:
+                    x_cols.append(col)
         self.x_cols = x_cols
-
-    def stash(self, cols):
-        self.stash.extend(cols)
-
-    def empty_stash(self):
-        self.stash = []
 
 
 class DataManager:
 
     PROFILE_ID_COL = 'profile_id'
+    START_OF_PROFILE_COL = 'p_start'
 
     def __init__(self, path, create_hold_out=True):
         # original data
@@ -99,24 +95,34 @@ class DataManager:
                                         LagFeatures(self.cl.x_cols)),
                                        ('rolling_feats_x',
                                         RollingFeatures(self.cl.x_cols,
-                                                        lookback=100))
+                                                        lookback=100)),
+                                        ('start_of_profile',
+                                         SimpleTransformer(
+                                             self.indicate_start_of_profile,
+                                             None, [self.PROFILE_ID_COL]))
                                        ])
 
         featurize_pipe = FeatureUnionReframer.make_df_retaining(featurize_union)
 
+        col_router = SimpleTransformer(None, None, [self.START_OF_PROFILE_COL])
         scaling_union = FeatureUnion([('scaler_x', Scaler(StandardScaler(),
                                                           self.cl,
                                                           select='x')),
                                      ('scaler_y', Scaler(StandardScaler(),
-                                                         self.cl, select='y'))
+                                                         self.cl, select='y')),
+
+                                     ('start_of_profile', col_router)
                                      ])
         scaling_pipe = FeatureUnionReframer.make_df_retaining(scaling_union)
+
+        poly_union = make_union(Polynomials(degree=2), col_router)
+        poly_pipe = FeatureUnionReframer.make_df_retaining(poly_union)
 
         self.pipe = Pipeline([
             ('feat_engineer', featurize_pipe),
             ('cleaning', DFCleaner()),
             ('scaler', scaling_pipe),
-            ('poly', Polynomials(degree=2)),
+            ('poly', poly_pipe),
             ('ident', None)
         ])
 
@@ -148,7 +154,8 @@ class DataManager:
 
     @property
     def actual(self):
-        sub_df = self.dataset[self.dataset[self.PROFILE_ID_COL].isin(cfg.data_cfg[
+        sub_df = self.dataset[self.dataset[self.PROFILE_ID_COL].isin(
+            cfg.data_cfg[
                                                             'testset'])]
         return sub_df[self.cl.y_cols].reset_index(drop=True)
 
@@ -193,6 +200,14 @@ class DataManager:
             .plot(subplots=True, sharex=True)
         plt.show()
 
+    def indicate_start_of_profile(self, s):
+        """Returns a DataFrame where the first observation of each new profile
+        id is indicated with True."""
+        assert isinstance(s, pd.DataFrame)
+        assert s.columns == self.PROFILE_ID_COL
+        return pd.DataFrame(data=~s.duplicated(),
+                            columns=[self.START_OF_PROFILE_COL])
+
 
 class SimpleTransformer(BaseEstimator, TransformerMixin):
     """Apply given transformation."""
@@ -200,13 +215,16 @@ class SimpleTransformer(BaseEstimator, TransformerMixin):
         self.transform_func = trans_func
         self.inverse_transform_func = untrans_func
         self.cols = columns
+        self.out_cols = []
 
     def fit(self, x, y=None):
         return self
 
     def transform(self, x):
         x = self._get_selection(x)
-        return self.transform_func(x) if callable(self.transform_func) else x
+        ret = self.transform_func(x) if callable(self.transform_func) else x
+        self.out_cols = list(ret.columns)
+        return ret
 
     def inverse_transform(self, x):
         return self.inverse_transform_func(x) \
@@ -214,10 +232,12 @@ class SimpleTransformer(BaseEstimator, TransformerMixin):
 
     def _get_selection(self, df):
         assert isinstance(df, pd.DataFrame)
+        assert set(self.cols).issubset(set(df.columns)),\
+            '{} is not in {}'.format(self.cols, df.columns)
         return df[self.cols]
 
     def get_feature_names(self):
-        return self.cols
+        return self.out_cols
 
 
 class LagFeatures(BaseEstimator, TransformerMixin):
@@ -349,6 +369,9 @@ class Polynomials(BaseEstimator, TransformerMixin):
         ret = pd.DataFrame(X, columns=self.out_cols)
         return ret
 
+    def get_feature_names(self):
+        return self.out_cols
+
 
 class DFCleaner(BaseEstimator, TransformerMixin):
 
@@ -422,6 +445,7 @@ class FeatureUnionReframer(BaseEstimator, TransformerMixin):
     def transform(self, X):
         assert isinstance(X, np.ndarray)
         if self.cutoff_transformer_name:
+            # todo Warum haben wir sechs Spalten mehr?
             cols = [c.split('__')[1] for c in self.union.get_feature_names()]
         else:
             cols = self.union.get_feature_names()

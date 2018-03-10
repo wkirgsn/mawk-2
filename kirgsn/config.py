@@ -43,6 +43,8 @@ keras_cfg = {
     'n_neurons': 64,
     'n_epochs': 200,
     'arch': 'gru',  # gru, lstm or rnn
+    'early_stop_patience': 30,
+    'l2_reg_w': 0.01,
     'hp_tuning': {'tbd': None},
 }
 
@@ -53,7 +55,7 @@ lgbm_cfg = {
                'scale_pos_weight': 6427,
                'max_depth': 48,
                'min_child_weight': 10.11,
-                'random_state': 2340,
+               'random_state': 2340,
                },
     'hp_tuning': {'num_leaves': list(range(2, 256, 2)),
                     'max_depth': list(range(2, 64)),
@@ -61,12 +63,8 @@ lgbm_cfg = {
                     'colsample_bytree': list(np.linspace(0.3, 1.0)),
                     'min_child_weight': list(np.linspace(0.01, 1000, 100)),
                     'random_state': list(range(2000, 3000, 20))  # arbitrary
-                    }
+                    },
 }
 
-train_cfg = {
-    'early_stop_patience': 30,
-    'l2_reg_w': 0.01,
-}
 
 
