@@ -64,7 +64,7 @@ def build_keras_model(x_shape=(100, 1, 10)):
     model.add(Dropout(0.5))
     model.add(Dense(4))
 
-    opt = Nadam(lr=1e-4)
+    opt = Nadam(lr=1e-5)
     model.compile(optimizer=opt, loss='mse')
     return model
 

@@ -58,12 +58,12 @@ lgbm_cfg = {
                'random_state': 2340,
                },
     'hp_tuning': {'num_leaves': list(range(2, 256, 2)),
-                    'max_depth': list(range(2, 64)),
-                    'scale_pos_weight': list(range(1, 10000)),
-                    'colsample_bytree': list(np.linspace(0.3, 1.0)),
-                    'min_child_weight': list(np.linspace(0.01, 1000, 100)),
-                    'random_state': list(range(2000, 3000, 20))  # arbitrary
-                    },
+                  'max_depth': list(range(2, 64)),
+                  'scale_pos_weight': list(range(1, 10000)),
+                  'colsample_bytree': list(np.linspace(0.3, 1.0)),
+                  'min_child_weight': list(np.linspace(0.01, 1000, 100)),
+                  'random_state': list(range(2000, 3000, 20))  # arbitrary
+                  },
 }
 
 
