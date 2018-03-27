@@ -44,6 +44,14 @@ def build_keras_model(x_shape=(100, 1, 10)):
     n_neurons = cfg.keras_cfg['n_neurons']
     arch_dict = {'lstm': LSTM, 'gru': GRU, 'rnn': SimpleRNN}
     arch_dict_cudnn = {'lstm': CuDNNLSTM, 'gru': CuDNNGRU, 'rnn': SimpleRNN}
+    # todo: add config parameter for using gpu or cpu explicitly. For smaller
+    #  nets (e.g. hidden units=64) CPU twice as fast. Switch by doing the
+    # following:
+    # import os
+    # os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"   # see issue #152
+    # os.environ["CUDA_VISIBLE_DEVICES"] = ""
+    # before Keras / Tensorflow is imported.
+
     if gpu_available:
         ANN = arch_dict_cudnn[cfg.keras_cfg['arch']]
     else:
