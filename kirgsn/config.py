@@ -1,4 +1,5 @@
 import numpy as np
+from hyperopt import hp
 
 debug_cfg = {'DEBUG': False,
              'choose_debug_on_gpu_availability': False,
@@ -64,6 +65,15 @@ lgbm_cfg = {
                   'min_child_weight': list(np.linspace(0.01, 1000, 100)),
                   'random_state': list(range(2000, 3000, 20))  # arbitrary
                   },
+    'hp_hyperopt_space':
+              {'num_leaves': hp.quniform('num_leaves', 8, 128, 2),
+               'max_depth': hp.uniform('max_depth', 2, 64),
+               'scale_pos_weight': hp.uniform('scale_pos_weight', 1, 10**4),
+               'colsample_bytree': hp.uniform('colsample_bytree', 0.3, 1.0),
+               'min_child_weight': hp.quniform('min_child_weight', 0.01,
+                                              1000, 100),
+               'random_state': hp.quniform('random_state', 2000, 3000, 100),
+               },
 }
 
 
