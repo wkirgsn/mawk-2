@@ -31,7 +31,7 @@ def hyperopt_objective(sampled_params):
     clf = lightgbm.LGBMRegressor(n_estimators=10000, **converted_params)
     score = cross_val_score(clf, X, Y, scoring=make_scorer(mean_squared_error),
                             cv=TimeSeriesSplit())
-    print("MSE: {:.3f} params {}".format(score, converted_params))
+    print("MSE: {:.3f} params {:}".format(score, converted_params))
     return score
 
 
