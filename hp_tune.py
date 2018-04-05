@@ -1,9 +1,7 @@
-from os.path import join
-from hyperopt import hp, tpe
+from hyperopt import tpe
 from hyperopt.fmin import fmin
 import uuid
 
-from tensorflow.python.client import device_lib
 import lightgbm
 from sklearn.model_selection import TimeSeriesSplit, RandomizedSearchCV, \
     cross_val_score
@@ -61,6 +59,7 @@ if __name__ == '__main__':
 
     if True:
         # hyperopt
+        print("Start hyperopt")
         X = tra_df[dm.cl.x_cols]
         Y = tra_df[dm.cl.y_cols[0]]
         space = cfg.lgbm_cfg['hp_hyperopt_space']
