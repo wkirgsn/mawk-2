@@ -14,7 +14,7 @@ import kirgsn.config as cfg
 import kirgsn.file_utils as futils
 
 
-def hyperopt_objective(params):
+def hyperopt_objective(sampled_params):
     # todo: Ugly shit
     param_dict = {'num_leaves': False,
                   'max_depth': False,
@@ -23,18 +23,18 @@ def hyperopt_objective(params):
                   'min_child_weight': True,
                   'random_state': False
                   }
-    params = {}
-    for p_name, p_range in cfg.lgbm_cfg['hp_hyperopt_space'].items():
+    converted_params = {}
+    for p_name, p_range in sampled_params.items():
         if param_dict[p_name]:
-            # True -> integer
-            params[p_name] = '{:.3f}'.format(p_range)
+            # True -> real_valued
+            converted_params[p_name] = '{:.3f}'.format(p_range)
         else:
-            # False -> real valued
-            params[p_name] = int(p_range)
-    clf = lightgbm.LGBMRegressor(n_estimators=10000, **params)
+            # False -> integer
+            converted_params[p_name] = int(p_range)
+    clf = lightgbm.LGBMRegressor(n_estimators=10000, **converted_params)
     score = cross_val_score(clf, X, Y, scoring=make_scorer(mean_squared_error),
                             cv=TimeSeriesSplit())
-    print("MSE: {:.3f} params {}".format(score, params))
+    print("MSE: {:.3f} params {}".format(score, converted_params))
     return score
 
 
