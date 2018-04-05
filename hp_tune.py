@@ -9,7 +9,6 @@ from sklearn.metrics import make_scorer, mean_squared_error
 
 from kirgsn.data import DataManager
 import kirgsn.config as cfg
-import kirgsn.file_utils as futils
 
 
 def hyperopt_objective(sampled_params):
@@ -38,14 +37,6 @@ def hyperopt_objective(sampled_params):
 
 if __name__ == '__main__':
     # config
-    gpu_available = len(futils.get_available_gpus()) >= 1
-    if cfg.debug_cfg['choose_debug_on_gpu_availability']:
-        DEBUG = not gpu_available
-    else:
-        DEBUG = cfg.debug_cfg['DEBUG']
-    if DEBUG:
-        print('## DEBUG MODE ON ##')
-    n_debug = cfg.debug_cfg['n_debug']
     batch_size = cfg.keras_cfg['batch_size']
     n_epochs = cfg.keras_cfg['n_epochs']
     if cfg.data_cfg['save_predictions']:
