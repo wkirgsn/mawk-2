@@ -1,7 +1,9 @@
 from hyperopt import tpe
 from hyperopt.fmin import fmin
+from skopt import BayesSearchCV
 import uuid
-
+import pandas as pd
+import numpy as np
 import lightgbm
 from sklearn.model_selection import TimeSeriesSplit, RandomizedSearchCV, \
     cross_val_score
@@ -28,11 +30,30 @@ def hyperopt_objective(sampled_params):
         else:
             # False -> integer
             converted_params[p_name] = int(p_range)
-    clf = lightgbm.LGBMRegressor(n_estimators=10000, **converted_params)
+    clf = lightgbm.LGBMRegressor(n_estimators=10, **converted_params)
     score = cross_val_score(clf, X, Y, scoring=make_scorer(mean_squared_error),
                             cv=TimeSeriesSplit())
     print("MSE: {:.3f} params {:}".format(score.mean(), converted_params))
     return score
+
+
+def status_print(optim_result):
+    """Status callback during bayesian hyperparameter search"""
+
+    # Get all the models tested so far in DataFrame format
+    all_models = pd.DataFrame(opt_search.cv_results_)
+
+    # Get current parameters and the best parameters
+    best_params = pd.Series(opt_search.best_params_)
+    print('Model #{}\nBest L2: {}\nBest params: {}\n'.format(
+        len(all_models),
+        np.round(opt_search.best_score_, 4),
+        opt_search.best_params_
+    ))
+
+    # Save all model results
+    clf_name = opt_search.estimator.__class__.__name__
+    all_models.to_csv(clf_name + "_cv_results.csv")
 
 
 if __name__ == '__main__':
@@ -48,7 +69,7 @@ if __name__ == '__main__':
     # featurize dataset (feature engineering)
     tra_df, _, tst_df = dm.get_featurized_sets()
 
-    if True:
+    if False:
         # hyperopt
         print("Start hyperopt")
         X = tra_df[dm.cl.x_cols]
@@ -61,18 +82,14 @@ if __name__ == '__main__':
                     max_evals=50)
         print("Hyperopt estimated optimum {}".format(best))
     else:
-        # random search
+        # skopt bayes search
 
         model = lightgbm.LGBMRegressor(n_estimators=10000)
         tscv = TimeSeriesSplit()
 
-        hyper_params = cfg.lgbm_cfg['hp_tuning']
-        # todo: Try hyperopt
-        rnd_search = \
-            RandomizedSearchCV(model, n_iter=100,
-                               param_distributions=hyper_params,
-                               iid=False, cv=tscv, )
-        rnd_search.fit(tra_df[dm.cl.x_cols], tra_df[dm.cl.y_cols[0]])
+        hyper_params = cfg.lgbm_cfg['hp_skopt_space']
+        opt_search = \
+            BayesSearchCV(model, n_iter=100, search_spaces=hyper_params,
+                          iid=False, cv=tscv, random_state=2018)
+        opt_search.fit(tra_df[dm.cl.x_cols], tra_df[dm.cl.y_cols[0]])
 
-        print('best params: {}'.format(rnd_search.best_params_))
-        print('best score: {}'.format(rnd_search.best_score_))
