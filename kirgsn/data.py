@@ -99,8 +99,13 @@ class DataManager:
                                         ('start_of_profile',
                                          SimpleTransformer(
                                              self.indicate_start_of_profile,
-                                             None, [self.PROFILE_ID_COL]))
-                                       ])
+                                             None, [self.PROFILE_ID_COL])),
+                                        ('u_q_sqrd+i_q_sqrd',
+                                         SimpleTransformer(
+                                             self.sum_of_squares,
+                                             None, ['i_q', 'u_q'])
+                                         )
+                                        ])
 
         featurize_pipe = FeatureUnionReframer.make_df_retaining(featurize_union)
 
@@ -207,6 +212,14 @@ class DataManager:
         assert s.columns == self.PROFILE_ID_COL
         return pd.DataFrame(data=~s.duplicated(),
                             columns=[self.START_OF_PROFILE_COL])
+
+    @staticmethod
+    def sum_of_squares(df):
+        """ Return a DataFrame with a single column that is the sum of all
+        columns squared"""
+        assert isinstance(df, pd.DataFrame)
+        return pd.DataFrame(data=np.square(df).sum(axis=1),
+                            columns=['sum_of_squares'])
 
 
 class SimpleTransformer(BaseEstimator, TransformerMixin):
