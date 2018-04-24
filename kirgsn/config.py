@@ -38,11 +38,11 @@ data_cfg = {
 plot_cfg = {'do_plot': True, }
 
 keras_cfg = {
-    'do_train': False,
+    'do_train': True,
     'add_shifts': False,
     'batch_size': 64,
     'n_neurons': 64,
-    'n_epochs': 200,
+    'n_epochs': 50,
     'arch': 'gru',  # gru, lstm or rnn
     'early_stop_patience': 30,
     'l2_reg_w': 0.01,
@@ -58,6 +58,14 @@ lgbm_cfg = {
                'min_child_weight': 10.11,
                'random_state': 2340,
                },
+    'params_found_by_skopt': {'scale_pos_weight': 10000.0,
+                              'min_child_weight': 2.2756358867092463,
+                              'num_leaves': 232,
+                              'random_state': 2000,
+                              'colsample_bytree': 0.4947227023598322,
+                              'max_depth': 29}
+
+    ,
     'hp_tuning': {'num_leaves': list(range(2, 256, 2)),
                   'max_depth': list(range(2, 64)),
                   'scale_pos_weight': list(range(1, 10000)),

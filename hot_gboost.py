@@ -127,7 +127,7 @@ if __name__ == '__main__':
     dm = DataManager(join('input', 'measures.csv'))
     tra_df, val_df, tst_df = dm.get_featurized_sets()
 
-    model = lightgbm.LGBMRegressor(**cfg.lgbm_cfg['params'])
+    model = lightgbm.LGBMRegressor(**cfg.lgbm_cfg['params_found_by_skopt'])
     tscv = TimeSeriesSplit()
 
     yhat = _train(model, is_mimo=False)
