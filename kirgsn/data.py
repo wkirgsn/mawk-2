@@ -104,6 +104,11 @@ class DataManager:
                                          SimpleTransformer(
                                              self.sum_of_squares,
                                              None, ['i_q', 'u_q'])
+                                         ),
+                                        ('u_d_sqrd+i_d_sqrd',
+                                         SimpleTransformer(
+                                             self.sum_of_squares,
+                                             None, ['i_d', 'u_d'])
                                          )
                                         ])
 
