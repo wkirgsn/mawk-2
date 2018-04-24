@@ -89,8 +89,7 @@ class DataManager:
                                                           np.square,
                                                           self.cl.y_cols
                                                           )),
-                                        ('identity_x', SimpleTransformer(
-                                            None, None, self.cl.x_cols)),
+                                        ('identity_x', Router(self.cl.x_cols)),
                                        ('lag_feats_x',
                                         LagFeatures(self.cl.x_cols)),
                                        ('rolling_feats_x',
@@ -114,18 +113,20 @@ class DataManager:
 
         featurize_pipe = FeatureUnionReframer.make_df_retaining(featurize_union)
 
-        col_router = SimpleTransformer(None, None, [self.START_OF_PROFILE_COL])
+        col_router_pstart = Router([self.START_OF_PROFILE_COL])
+        col_router_y = Router(self.cl.y_cols)
         scaling_union = FeatureUnion([('scaler_x', Scaler(StandardScaler(),
                                                           self.cl,
                                                           select='x')),
                                      ('scaler_y', Scaler(StandardScaler(),
                                                          self.cl, select='y')),
 
-                                     ('start_of_profile', col_router)
+                                     ('start_of_profile', col_router_pstart)
                                      ])
         scaling_pipe = FeatureUnionReframer.make_df_retaining(scaling_union)
 
-        poly_union = make_union(Polynomials(degree=2), col_router)
+        poly_union = make_union(Polynomials(degree=2, colmanager=self.cl),
+                                col_router_pstart, col_router_y)
         poly_pipe = FeatureUnionReframer.make_df_retaining(poly_union)
 
         self.pipe = Pipeline([
@@ -223,8 +224,9 @@ class DataManager:
         """ Return a DataFrame with a single column that is the sum of all
         columns squared"""
         assert isinstance(df, pd.DataFrame)
+        colnames = ["{}^2".format(c) for c in list(df.columns)]
         return pd.DataFrame(data=np.square(df).sum(axis=1),
-                            columns=['sum_of_squares'])
+                            columns=["+".join(colnames)])
 
 
 class SimpleTransformer(BaseEstimator, TransformerMixin):
@@ -256,6 +258,12 @@ class SimpleTransformer(BaseEstimator, TransformerMixin):
 
     def get_feature_names(self):
         return self.out_cols
+
+
+class Router(SimpleTransformer):
+    """SimpleTransformer with transformation functions being None"""
+    def __init__(self, columns):
+        super().__init__(None, None, columns=columns)
 
 
 class LagFeatures(BaseEstimator, TransformerMixin):
@@ -369,11 +377,13 @@ class ReSamplerForBatchTraining(BaseEstimator, TransformerMixin):
 
 class Polynomials(BaseEstimator, TransformerMixin):
 
-    def __init__(self, degree):
+    def __init__(self, degree, colmanager):
         self.poly = PolynomialFeatures(degree=degree)
         self.out_cols = []
+        self.cl = colmanager
 
     def fit(self, X, y=None):
+        X = self._get_selection(X)
         assert isinstance(X, pd.DataFrame)
         self.poly.fit(X, y)
         self.out_cols = self.poly.get_feature_names(input_features=X.columns)
@@ -382,10 +392,17 @@ class Polynomials(BaseEstimator, TransformerMixin):
     def transform(self, X):
         """This transform shall only take Input that has the same columns as
         those this transformer had during fit"""
+        X = self._get_selection(X, update=False)
         assert isinstance(X, pd.DataFrame)
         X = self.poly.transform(X)
         ret = pd.DataFrame(X, columns=self.out_cols)
         return ret
+
+    def _get_selection(self, df, update=True):
+        assert isinstance(df, pd.DataFrame)
+        if update:
+            self.cl.update(df)
+        return df[self.cl.x_cols]
 
     def get_feature_names(self):
         return self.out_cols
