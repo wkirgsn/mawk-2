@@ -10,7 +10,7 @@ from sklearn.preprocessing import MinMaxScaler, StandardScaler,\
 from sklearn.pipeline import FeatureUnion, Pipeline, make_pipeline, make_union
 from sklearn.base import BaseEstimator, TransformerMixin
 
-import kirgsn.config as cfg
+import preprocessing.config as cfg
 
 
 def measure_time(func):

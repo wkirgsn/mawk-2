@@ -12,9 +12,9 @@ import seaborn
 from sklearn.model_selection import validation_curve, TimeSeriesSplit
 import lightgbm
 
-from kirgsn.data import DataManager, ReSamplerForBatchTraining
-import kirgsn.config as cfg
-import kirgsn.file_utils as futils
+from preprocessing.data import DataManager, ReSamplerForBatchTraining
+import preprocessing.config as cfg
+import preprocessing.file_utils as futils
 
 warnings.filterwarnings("ignore")
 np.random.seed(2017)
@@ -110,21 +110,13 @@ def _train(_model, is_mimo=True, with_val_set=True):
 
 
 if __name__ == '__main__':
-    # config
-    gpu_available = len(futils.get_available_gpus()) >= 1
-    if cfg.debug_cfg['choose_debug_on_gpu_availability']:
-        DEBUG = not gpu_available
-    else:
-        DEBUG = cfg.debug_cfg['DEBUG']
-    if DEBUG:
-        print('## DEBUG MODE ON ##')
-    n_debug = cfg.debug_cfg['n_debug']
+
     if cfg.data_cfg['save_predictions']:
         model_uuid = str(uuid.uuid4())[:6]
         print('model uuid: {}'.format(model_uuid))
 
     # featurize dataset (feature engineering)
-    dm = DataManager(join('input', 'measures.csv'))
+    dm = DataManager(cfg.data_cfg['file_path'])
     tra_df, val_df, tst_df = dm.get_featurized_sets()
 
     model = lightgbm.LGBMRegressor(**cfg.lgbm_cfg['params_found_by_skopt'])
@@ -144,6 +136,10 @@ if __name__ == '__main__':
                                                     inversed_pred.values)))
     # save predictions
     futils.save_predictions(model_uuid, inversed_pred)
+
     # plots
     if cfg.plot_cfg['do_plot']:
-        plot_results(actual, inversed_pred)
+        try:
+            plot_results(actual, inversed_pred)
+        except Exception:
+            print('Plot failed...')

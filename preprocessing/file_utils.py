@@ -1,7 +1,7 @@
+import os
 import sqlite3
 import numpy as np
-from tensorflow.python.client import device_lib
-import kirgsn.config as cfg
+import preprocessing.config as cfg
 
 
 def save_predictions(id, pred):
@@ -24,6 +24,24 @@ def save_predictions(id, pred):
             print('Predictions of model with uuid {} saved to db.'.format(id))
 
 
+def truncate_actual_target(actual, prediction):
+    # trunc actual if prediction is shorter
+    if prediction.shape[0] != actual.shape[0]:
+        print('trunc actual from {} to {} samples'.format(actual.shape[0],
+                                                          prediction.shape[0]))
+    offset = actual.shape[0] - prediction.shape[0]
+    return actual.iloc[offset:, :]
+
+
 def get_available_gpus():
+
+    if cfg.keras_cfg['use_cpu']:
+        print("Update environment variables to use CPU")
+        os.environ['CUDA_VISIBLE_DEVICES'] = ""
+    elif 'CUDA_VISIBLE_DEVICES' in os.environ:
+        del os.environ['CUDA_VISIBLE_DEVICES']
+
+    from tensorflow.python.client import device_lib
+
     local_device_protos = device_lib.list_local_devices()
     return [x.name for x in local_device_protos if x.device_type == 'GPU']

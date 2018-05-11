@@ -18,9 +18,9 @@ from keras import __version__ as keras_version
 from keras.wrappers.scikit_learn import KerasRegressor
 from keras.callbacks import EarlyStopping, LearningRateScheduler
 
-import kirgsn.config as cfg
-from kirgsn.data import DataManager, ReSamplerForBatchTraining
-import kirgsn.file_utils as futils
+import preprocessing.config as cfg
+from preprocessing.data import DataManager, ReSamplerForBatchTraining
+import preprocessing.file_utils as futils
 
 
 class CustomKerasRegressor(KerasRegressor):
@@ -45,31 +45,30 @@ def build_keras_model(x_shape=(100, 1, 10)):
     n_neurons = cfg.keras_cfg['n_neurons']
     arch_dict = {'lstm': LSTM, 'gru': GRU, 'rnn': SimpleRNN}
     arch_dict_cudnn = {'lstm': CuDNNLSTM, 'gru': CuDNNGRU, 'rnn': SimpleRNN}
-    # todo: add config parameter for using gpu or cpu explicitly. For smaller
-    #  nets (e.g. hidden units=64) CPU twice as fast. Switch by doing the
-    # following:
+
     # import os
     # os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"   # see issue #152
     # os.environ["CUDA_VISIBLE_DEVICES"] = ""
     # before Keras / Tensorflow is imported.
 
+    ann_cfg = {
+        'units': cfg.keras_cfg['n_neurons'],
+        'batch_input_shape': (batch_size, x_shape[1], x_shape[2]),
+        'kernel_regularizer': regularizers.l2(cfg.keras_cfg['l2_reg_w']),
+        'activity_regularizer': regularizers.l2(cfg.keras_cfg['l2_reg_w']),
+        'recurrent_regularizer':regularizers.l2(cfg.keras_cfg['l2_reg_w']),
+        'stateful': True,
+    }
+
     if gpu_available:
         ANN = arch_dict_cudnn[cfg.keras_cfg['arch']]
     else:
         ANN = arch_dict[cfg.keras_cfg['arch']]
+        ann_cfg['implementation'] = 2
 
     # create model
     model = Sequential()
-    model.add(
-        ANN(n_neurons,
-            # implementation=2,  # only known by non-CUDNN classes
-            batch_input_shape=(batch_size, x_shape[1], x_shape[2]),
-            kernel_regularizer=regularizers.l2(cfg.keras_cfg['l2_reg_w']),
-            activity_regularizer=regularizers.l2(cfg.keras_cfg['l2_reg_w']),
-            recurrent_regularizer=regularizers.l2(
-                cfg.keras_cfg['l2_reg_w']),
-            stateful=True,
-            ))
+    model.add(ANN(**ann_cfg))
     model.add(Dropout(0.5))
     model.add(Dense(4))
 
@@ -157,8 +156,11 @@ if __name__ == '__main__':
     futils.save_predictions(model_uuid, inversed_pred)
     # plots
     if cfg.plot_cfg['do_plot']:
-        plt.subplot(211)
-        plt.plot(history['loss'])
-        plt.plot(history['val_loss'])
-        plt.subplot(212)
-        plot_results(actual, inversed_pred)
+        try:
+            plt.subplot(211)
+            plt.plot(history['loss'])
+            plt.plot(history['val_loss'])
+            plt.subplot(212)
+            plot_results(actual, inversed_pred)
+        except Exception:
+            print("Plotting failed..")

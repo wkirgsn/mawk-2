@@ -29,8 +29,8 @@ data_cfg = {
                  '29', '30',
                  '31', '32', '36'],
     # paths
-    'file_path': "input/measures.csv",
-    'db_path': 'results.db',
+    'file_path': "data/input/measures.csv",
+    'db_path': 'data/results.db',
     'save_predictions': True,
     }
 
@@ -39,6 +39,7 @@ plot_cfg = {'do_plot': True, }
 
 keras_cfg = {
     'do_train': True,
+    'use_cpu': False,
     'add_shifts': False,
     'batch_size': 64,
     'n_neurons': 64,

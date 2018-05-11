@@ -9,8 +9,8 @@ from sklearn.model_selection import TimeSeriesSplit, RandomizedSearchCV, \
     cross_val_score
 from sklearn.metrics import make_scorer, mean_squared_error
 
-from kirgsn.data import DataManager
-import kirgsn.config as cfg
+from preprocessing.data import DataManager
+import preprocessing.config as cfg
 
 
 def hyperopt_objective(sampled_params):

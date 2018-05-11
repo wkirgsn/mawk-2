@@ -1,15 +1,14 @@
+import argparse
+
 import sqlite3
 import pandas as pd
-import numpy as np
-from os.path import join
 from sklearn.metrics import mean_squared_error
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-import kirgsn.config as cfg
-from kirgsn.data import DataManager
-
-ID_TO_READ = 'ef966d'
+import preprocessing.config as cfg
+from preprocessing.data import DataManager
+from preprocessing import file_utils as futils
 
 
 def plot_results(y, yhat):
@@ -27,20 +26,24 @@ def plot_results(y, yhat):
 
 if __name__ == '__main__':
 
+    parser = argparse.ArgumentParser(description='Visualize performance of the '
+                                                 'given model uid.')
+    parser.add_argument('model_uid',
+                        help='The 6-digit model uid in hex')
+    args = parser.parse_args()
+
     with sqlite3.connect(cfg.data_cfg['db_path']) as con:
         query = """SELECT * FROM predictions WHERE id=?"""
-        yhat = pd.read_sql_query(query, con, params=(ID_TO_READ,))
+        yhat = pd.read_sql_query(query, con, params=(args.model_uid,))
 
     yhat.drop(['id', 'idx'], inplace=True, axis=1)
-    dm = DataManager(join('input', 'measures.csv'))
-    actual = dm.actual
 
-    # trunc actual if prediction is shorter
-    if yhat.shape[0] != actual.shape[0]:
-        print('trunc actual from {} to {} samples'.format(actual.shape[0],
-                                                          yhat.shape[0]))
-        offset = actual.shape[0] - yhat.shape[0]
-        actual = actual.iloc[offset:, :]
+    dm = DataManager(cfg.data_cfg['file_path'])
+    actual = futils.truncate_actual_target(dm.actual, yhat)
+
     print('mse: {:.6} K²'.format(mean_squared_error(actual.values,
                                                     yhat.values)))
-    plot_results(actual, yhat)
+    try:
+        plot_results(actual, yhat)
+    except Exception:
+        print('plot failed')
