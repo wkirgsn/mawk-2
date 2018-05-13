@@ -48,8 +48,7 @@ def status_print(optim_result):
     print('Model #{}\nBest L2: {}\nBest params: {}\n'.format(
         len(all_models),
         np.round(opt_search.best_score_, 4),
-        opt_search.best_params_
-    ))
+        best_params))
 
     # Save all model results
     clf_name = opt_search.estimator.__class__.__name__
@@ -58,8 +57,6 @@ def status_print(optim_result):
 
 if __name__ == '__main__':
     # config
-    batch_size = cfg.keras_cfg['batch_size']
-    n_epochs = cfg.keras_cfg['n_epochs']
     if cfg.data_cfg['save_predictions']:
         model_uuid = str(uuid.uuid4())[:6]
         print('model uuid: {}'.format(model_uuid))
@@ -91,6 +88,7 @@ if __name__ == '__main__':
         opt_search = \
             BayesSearchCV(model, n_iter=2, search_spaces=hyper_params,
                           iid=False, cv=tscv, random_state=2018)
-        opt_search.fit(tra_df[dm.cl.x_cols], tra_df[dm.cl.y_cols[0]],
+        opt_search.fit(tra_df[dm.cl.x_cols],
+                       tra_df[dm.cl.y_cols[0]],
                        callback=status_print)
 

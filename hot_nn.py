@@ -42,7 +42,6 @@ def plot_results(_y, _yhat):
 
 def build_keras_model(x_shape=(100, 1, 10)):
     print('Keras version: {}'.format(keras_version))
-    n_neurons = cfg.keras_cfg['n_neurons']
     arch_dict = {'lstm': LSTM, 'gru': GRU, 'rnn': SimpleRNN}
     arch_dict_cudnn = {'lstm': CuDNNLSTM, 'gru': CuDNNGRU, 'rnn': SimpleRNN}
 
