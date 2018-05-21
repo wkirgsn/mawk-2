@@ -44,12 +44,14 @@ def build_keras_model(x_shape=(100, 1, 10),
                       arch='lstm',
                       n_layers=1,
                       n_units=64,
-                      kernel_reg=None,
-                      activity_reg=None,
-                      recurrent_reg=None,
+                      kernel_reg=1e-9,
+                      activity_reg=1e-9,
+                      recurrent_reg=1e-9,
                       dropout_rate=0.5,
                       optimizer='nadam',
                       lr_rate=1e-5,
+                      batch_size=64,
+                      use_gpu=False,
                       ):
     arch_dict = {'lstm': LSTM, 'gru': GRU, 'rnn': SimpleRNN}
     arch_dict_cudnn = {'lstm': CuDNNLSTM, 'gru': CuDNNGRU, 'rnn': SimpleRNN}
@@ -66,15 +68,15 @@ def build_keras_model(x_shape=(100, 1, 10),
     ann_cfg = {
         'units': n_units,
         'batch_input_shape': (batch_size, x_shape[1], x_shape[2]),
-        'kernel_regularizer': kernel_reg,
-        'activity_regularizer': activity_reg,
-        'recurrent_regularizer': recurrent_reg,
+        'kernel_regularizer': regularizers.l2(kernel_reg),
+        'activity_regularizer': regularizers.l2(activity_reg),
+        'recurrent_regularizer': regularizers.l2(recurrent_reg),
         'stateful': True,
     }
     if n_layers > 1:
         ann_cfg['return_sequences'] = True
 
-    if gpu_available:
+    if use_gpu:
         ANN = arch_dict_cudnn[arch]
     else:
         ANN = arch_dict[arch]
@@ -111,7 +113,6 @@ if __name__ == '__main__':
         print('## DEBUG MODE ON ##')
     n_debug = cfg.debug_cfg['n_debug']
     batch_size = cfg.keras_cfg['params']['batch_size']
-    n_epochs = cfg.keras_cfg['params']['n_epochs']
     if cfg.data_cfg['save_predictions']:
         model_uuid = str(uuid.uuid4())[:6]
         print('model uuid: {}'.format(model_uuid))
@@ -130,14 +131,12 @@ if __name__ == '__main__':
     # todo: How to adaptively decrease lr? -> scheduler callback
     callbacks = [
         EarlyStopping(monitor='val_loss',
-                      patience=cfg.keras_cfg['params']['early_stop_patience'],
+                      patience=cfg.keras_cfg['early_stop_patience'],
                       verbose=0),
     ]
 
     KerasRegressor_config = {'x_shape': (batch_size, 1, len(dm.cl.x_cols)),
-                             'epochs': n_epochs,
                              'batch_size': batch_size,
-                             'n_layers': 3,
                              'validation_data': (
                                  reshape_input_for_batch_train(
                                      val_df[dm.cl.x_cols]),
@@ -145,8 +144,11 @@ if __name__ == '__main__':
                              'verbose': 1,
                              'shuffle': False,
                              'callbacks': callbacks,
+                             'use_gpu': gpu_available,
                              }
-
+    # add configs from config file (these must match with args of build_fn)
+    KerasRegressor_config.update(cfg.keras_cfg['params'])
+    # create model
     nn_estimator = CustomKerasRegressor(build_fn=build_keras_model,
                                         **KerasRegressor_config)
 
