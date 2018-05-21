@@ -12,7 +12,7 @@ from sklearn.metrics import mean_squared_error
 from keras.models import Sequential
 from keras.layers import LSTM, GRU, CuDNNLSTM, CuDNNGRU, SimpleRNN
 from keras.layers.core import Dense, Dropout, Flatten
-from keras.optimizers import Adam, Nadam
+import keras.optimizers as opts
 from keras import regularizers
 from keras import __version__ as keras_version
 from keras.wrappers.scikit_learn import KerasRegressor
@@ -40,10 +40,23 @@ def plot_results(_y, _yhat):
     plt.show()
 
 
-def build_keras_model(x_shape=(100, 1, 10)):
-    print('Keras version: {}'.format(keras_version))
+def build_keras_model(x_shape=(100, 1, 10),
+                      arch='lstm',
+                      n_layers=1,
+                      n_units=64,
+                      kernel_reg=None,
+                      activity_reg=None,
+                      recurrent_reg=None,
+                      dropout_rate=0.5,
+                      optimizer='nadam',
+                      lr_rate=1e-5,
+                      ):
     arch_dict = {'lstm': LSTM, 'gru': GRU, 'rnn': SimpleRNN}
     arch_dict_cudnn = {'lstm': CuDNNLSTM, 'gru': CuDNNGRU, 'rnn': SimpleRNN}
+
+    opts_map = {'adam': opts.Adam, 'nadam': opts.Nadam,
+                'adamax': opts.Adamax, 'sgd': opts.SGD,
+                'rmsprop': opts.RMSprop}
 
     # import os
     # os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"   # see issue #152
@@ -51,27 +64,37 @@ def build_keras_model(x_shape=(100, 1, 10)):
     # before Keras / Tensorflow is imported.
 
     ann_cfg = {
-        'units': cfg.keras_cfg['n_neurons'],
+        'units': n_units,
         'batch_input_shape': (batch_size, x_shape[1], x_shape[2]),
-        'kernel_regularizer': regularizers.l2(cfg.keras_cfg['l2_reg_w']),
-        'activity_regularizer': regularizers.l2(cfg.keras_cfg['l2_reg_w']),
-        'recurrent_regularizer':regularizers.l2(cfg.keras_cfg['l2_reg_w']),
+        'kernel_regularizer': kernel_reg,
+        'activity_regularizer': activity_reg,
+        'recurrent_regularizer': recurrent_reg,
         'stateful': True,
     }
+    if n_layers > 1:
+        ann_cfg['return_sequences'] = True
 
     if gpu_available:
-        ANN = arch_dict_cudnn[cfg.keras_cfg['arch']]
+        ANN = arch_dict_cudnn[arch]
     else:
-        ANN = arch_dict[cfg.keras_cfg['arch']]
+        ANN = arch_dict[arch]
         ann_cfg['implementation'] = 2
 
     # create model
     model = Sequential()
     model.add(ANN(**ann_cfg))
     model.add(Dropout(0.5))
+    if n_layers > 1:
+        for i in range(n_layers-1):
+            ann_cfg.pop('batch_input_shape', None)
+            if i == n_layers-2:
+                ann_cfg['return_sequences'] = False
+            model.add(ANN(**ann_cfg))
+            model.add(Dropout(dropout_rate))
+
     model.add(Dense(4))
 
-    opt = Nadam(lr=1e-5)
+    opt = opts_map[optimizer](lr=lr_rate)
     model.compile(optimizer=opt, loss='mse')
     return model
 
@@ -87,8 +110,8 @@ if __name__ == '__main__':
     if DEBUG:
         print('## DEBUG MODE ON ##')
     n_debug = cfg.debug_cfg['n_debug']
-    batch_size = cfg.keras_cfg['batch_size']
-    n_epochs = cfg.keras_cfg['n_epochs']
+    batch_size = cfg.keras_cfg['params']['batch_size']
+    n_epochs = cfg.keras_cfg['params']['n_epochs']
     if cfg.data_cfg['save_predictions']:
         model_uuid = str(uuid.uuid4())[:6]
         print('model uuid: {}'.format(model_uuid))
@@ -107,13 +130,14 @@ if __name__ == '__main__':
     # todo: How to adaptively decrease lr? -> scheduler callback
     callbacks = [
         EarlyStopping(monitor='val_loss',
-                      patience=cfg.keras_cfg['early_stop_patience'],
+                      patience=cfg.keras_cfg['params']['early_stop_patience'],
                       verbose=0),
     ]
 
     KerasRegressor_config = {'x_shape': (batch_size, 1, len(dm.cl.x_cols)),
                              'epochs': n_epochs,
                              'batch_size': batch_size,
+                             'n_layers': 3,
                              'validation_data': (
                                  reshape_input_for_batch_train(
                                      val_df[dm.cl.x_cols]),

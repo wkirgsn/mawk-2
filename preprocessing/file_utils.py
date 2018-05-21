@@ -35,7 +35,7 @@ def truncate_actual_target(actual, prediction):
 
 def get_available_gpus():
 
-    if cfg.keras_cfg['use_cpu']:
+    if cfg.keras_cfg['params']['use_cpu']:
         print("Update environment variables to use CPU")
         os.environ['CUDA_VISIBLE_DEVICES'] = ""
     elif 'CUDA_VISIBLE_DEVICES' in os.environ:

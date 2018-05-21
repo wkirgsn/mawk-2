@@ -38,16 +38,31 @@ data_cfg = {
 plot_cfg = {'do_plot': True, }
 
 keras_cfg = {
-    'do_train': True,
-    'use_cpu': False,
-    'add_shifts': False,
-    'batch_size': 64,
-    'n_neurons': 64,
-    'n_epochs': 50,
-    'arch': 'gru',  # gru, lstm or rnn
-    'early_stop_patience': 30,
-    'l2_reg_w': 0.01,
-    'hp_tuning': {'tbd': None},
+    'params': {
+        'do_train': True,
+        'use_cpu': False,
+        'add_shifts': False,
+        'batch_size': 64,
+        'n_layer': 1,
+        'n_units': 64,
+        'n_epochs': 50,
+        'arch': 'gru',  # gru, lstm or rnn
+        'early_stop_patience': 30,
+        'kernel_reg': 1e-2,
+        'activity_reg': 1e-2,
+        'recurrent_reg': 1e-2,
+    },
+    'hp_skopt_space': {
+        'arch': ['lstm', 'rnn', 'gru'],
+        'n_layer': (1, 5),
+        'n_units': (4, 2048),
+        'kernel_reg': (1e-9, 1e-1, 'log-uniform'),
+        'activity_reg': (1e-9, 1e-1, 'log-uniform'),
+        'recurrent_reg': (1e-9, 1e-1, 'log-uniform'),
+        'dropout_rate': (0.3, 0.7, 'uniform'),
+        'optimizer': ('adam', 'nadam', 'adamax', 'sgd', 'rmsprop')
+    },
+
 }
 
 lgbm_cfg = {

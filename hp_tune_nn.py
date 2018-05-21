@@ -3,13 +3,13 @@ import uuid
 import pandas as pd
 import numpy as np
 
-from sklearn.model_selection import TimeSeriesSplit, RandomizedSearchCV, \
-    cross_val_score
+from sklearn.model_selection import TimeSeriesSplit
 from sklearn.metrics import make_scorer, mean_squared_error
 
-from preprocessing.data import DataManager
+from preprocessing.data import DataManager, ReSamplerForBatchTraining
 import preprocessing.config as cfg
-from hot_nn import build_keras_model
+from hot_nn import build_keras_model, reshape_input_for_batch_train,\
+    CustomKerasRegressor
 
 
 def status_print(optim_result):
@@ -31,8 +31,26 @@ def status_print(optim_result):
     all_models.to_csv(clf_name + "_cv_results.csv")
 
 
+def get_keras_model_for_kfold_training():
+    n_epochs = cfg.keras_cfg['n_epochs']
+
+    # todo: params to tune (must be args to build_keras_model)
+    KerasRegressor_config = {'x_shape': (batch_size, 1, len(dm.cl.x_cols)),
+                             'n_layers': 3,
+                             'epochs': n_epochs,
+                             'batch_size': batch_size,
+                             'verbose': 1,
+                             'shuffle': False,
+                             }
+
+    nn_estimator = CustomKerasRegressor(build_fn=build_keras_model,
+                                        **KerasRegressor_config)
+    return nn_estimator
+
+
 if __name__ == '__main__':
     # config
+    batch_size = cfg.keras_cfg['batch_size']
     if cfg.data_cfg['save_predictions']:
         model_uuid = str(uuid.uuid4())[:6]
         print('model uuid: {}'.format(model_uuid))
@@ -41,15 +59,19 @@ if __name__ == '__main__':
 
     # featurize dataset (feature engineering)
     tra_df, _, tst_df = dm.get_featurized_sets()
-    tra_df = tra_df.append(tst_df, ignore_index=True)
+    full_df = tra_df.append(tst_df, ignore_index=True)
 
-    model = build_keras_model()
+    # reorder samples
+    resampler = ReSamplerForBatchTraining(batch_size)
+    full_df = resampler.fit_transform(full_df)  # there is nothing fitted
+
+    model = get_keras_model_for_kfold_training()
     tscv = TimeSeriesSplit()
 
-    hyper_params = cfg.lgbm_cfg['hp_skopt_space']
+    hyper_params = cfg.keras_cfg['hp_skopt_space']
     opt_search = \
         BayesSearchCV(model, n_iter=2, search_spaces=hyper_params,
                       iid=False, cv=tscv, random_state=2018)
-    opt_search.fit(tra_df[dm.cl.x_cols],
-                   tra_df[dm.cl.y_cols[0]],
+    opt_search.fit(full_df[dm.cl.x_cols],
+                   full_df[dm.cl.y_cols[0]],
                    callback=status_print)
